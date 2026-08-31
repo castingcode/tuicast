@@ -6,152 +6,389 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/castingcode/tuicast"
+	"github.com/castingcode/tuicast/xterm"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestApplication(t *testing.T) {
-	Convey("The application opens on a deterministic login screen", t, func() {
+	Convey("The Bubble Tea application starts on a deterministic login page", t, func() {
 		application := newApplication()
 
-		output := string(application.Open())
+		view := application.View().Content
 
-		So(output, ShouldContainSubstring, "\x1b[?1049h")
-		So(output, ShouldContainSubstring, "LOGIN / AUTHENTICATION")
-		So(output, ShouldContainSubstring, "operator / casting")
+		So(view, ShouldContainSubstring, "LOGIN / AUTHENTICATION")
+		So(view, ShouldContainSubstring, "operator / casting")
+		So(application.loginInputs[0].Focused(), ShouldBeTrue)
 	})
 
-	Convey("Fragmented text and function-key input can authenticate", t, func() {
+	Convey("Login supports focus navigation, validation, and function keys", t, func() {
 		application := newApplication()
-		application.Open()
+		application.Update(runes("wrong"))
+		application.Update(key(tea.KeyTab))
+		application.Update(runes("secret"))
+		application.Update(key(tea.KeyF1))
 
-		application.Handle([]byte("oper"))
-		application.Handle([]byte("ator\tcast"))
-		application.Handle([]byte("ing"))
-		So(application.Handle([]byte("\x1b")), ShouldBeEmpty)
-		output := string(application.Handle([]byte("OP")))
+		So(application.page, ShouldEqual, pageLogin)
+		So(application.View().Content, ShouldContainSubstring, "Invalid user ID or password")
+		So(application.loginInputs[1].Value(), ShouldBeEmpty)
 
-		So(output, ShouldContainSubstring, "TERMINAL TEST SYSTEM")
-		So(output, ShouldContainSubstring, "Authenticated as operator")
-		So(output, ShouldNotContainSubstring, "castingcasting")
+		application.loginInputs[0].SetValue("")
+		application.Update(runes("operator"))
+		application.Update(key(tea.KeyTab))
+		application.Update(runes("casting"))
+		application.Update(key(tea.KeyF1))
+
 		So(application.page, ShouldEqual, pageMenu)
+		So(application.View().Content, ShouldContainSubstring, "TERMINAL TEST SYSTEM")
 	})
 
-	Convey("CSI function keys and unsupported sequences are consumed completely", t, func() {
+	Convey("Bracketed paste reaches active input components and the key inspector", t, func() {
 		application := newApplication()
-		application.Open()
-		application.Handle([]byte("operator\tcasting"))
+		application.Update(tea.PasteMsg{Content: "operator"})
+		application.Update(key(tea.KeyTab))
+		application.Update(tea.PasteMsg{Content: "casting"})
+		application.Update(key(tea.KeyF1))
+		So(application.page, ShouldEqual, pageMenu)
 
-		So(application.Handle([]byte("\x1b[")), ShouldBeEmpty)
-		output := string(application.Handle([]byte("99~\x1b[11~")))
+		application.selected = 1
+		application.Update(key(tea.KeyEnter))
+		application.Update(tea.PasteMsg{Content: "PO-PASTED"})
+		So(application.form.inputs[formPurchaseOrder].Value(), ShouldEqual, "PO-PASTED")
 
-		So(output, ShouldContainSubstring, "TERMINAL TEST SYSTEM")
-		So(string(application.username), ShouldEqual, "operator")
+		application.page = pageKeys
+		application.Update(tea.PasteMsg{Content: "bulk input"})
+		So(application.keys.view(), ShouldContainSubstring, `paste "bulk input"`)
 	})
 
-	Convey("Invalid credentials retain diagnostic state without exposing the password", t, func() {
+	Convey("The menu opens forms and tables as pages of the same application", t, func() {
+		application := authenticatedApplication()
+		application.selected = 1
+
+		application.Update(key(tea.KeyEnter))
+		So(application.page, ShouldEqual, pageForm)
+		So(application.View().Content, ShouldContainSubstring, "RECEIVING FORM")
+
+		application.Update(key(tea.KeyEsc))
+		application.selected = 2
+		application.Update(key(tea.KeyEnter))
+		So(application.page, ShouldEqual, pageTable)
+		So(application.View().Content, ShouldContainSubstring, "WAREHOUSE ORDERS")
+	})
+
+	Convey("The menu opens every implemented terminal laboratory", t, func() {
+		cases := []struct {
+			selection int
+			page      page
+			text      string
+		}{
+			{3, pageScrolling, "DETERMINISTIC EVENT LOG"},
+			{4, pageColors, "ANSI COLORS AND ATTRIBUTES"},
+			{5, pageCursor, "CURSOR MOVEMENT"},
+			{6, pageKeys, "FUNCTION KEYS"},
+			{9, pageResize, "TERMINAL RESIZE"},
+			{10, pageUnicode, "UNICODE ALIGNMENT"},
+		}
+		for _, testCase := range cases {
+			application := authenticatedApplication()
+			application.selected = testCase.selection
+
+			application.Update(key(tea.KeyEnter))
+
+			So(application.page, ShouldEqual, testCase.page)
+			So(application.View().Content, ShouldContainSubstring, testCase.text)
+		}
+	})
+
+	Convey("The form validates required values and accepts a complete receipt", t, func() {
+		application := authenticatedApplication()
+		application.selected = 1
+		application.Update(key(tea.KeyEnter))
+		application.form.focus = formSubmit
+
+		application.Update(key(tea.KeyEnter))
+
+		So(application.form.focus, ShouldEqual, formPurchaseOrder)
+		So(application.View().Content, ShouldContainSubstring, "purchase order is required")
+		So(application.View().Content, ShouldContainSubstring, "quantity must be a positive number")
+
+		application.form.inputs[formPurchaseOrder].SetValue("PO-10002341")
+		application.form.inputs[formSKU].SetValue("WIDGET-42")
+		application.form.inputs[formQuantity].SetValue("25")
+		application.form.inputs[formBin].SetValue("A-01-02")
+		application.form.notes.SetValue("dock 3\ninspect packaging")
+		application.form.priority = 1
+		application.form.focus = formSubmit
+		application.Update(key(tea.KeyEnter))
+
+		So(application.form.submitted, ShouldBeTrue)
+		So(application.View().Content, ShouldContainSubstring, "RECEIPT ACCEPTED")
+		So(application.View().Content, ShouldContainSubstring, "PO-10002341 / WIDGET-42 / quantity 25 / A-01-02 / Urgent")
+	})
+
+	Convey("The form supports reverse focus traversal and preserves values on resize", t, func() {
+		form := newFormModel(80, 24)
+		form.inputs[0].SetValue("PO-10002341")
+
+		_, _ = form.update(modifiedKey(tea.KeyTab, tea.ModShift))
+		So(form.focus, ShouldEqual, formCancel)
+
+		form.resize(45, 18)
+		So(form.inputs[0].Value(), ShouldEqual, "PO-10002341")
+		So(form.inputs[0].Width(), ShouldEqual, 27)
+
+		form.focus = formNotes
+		form.notes.Focus()
+		_, _ = form.update(runes("first line"))
+		_, _ = form.update(key(tea.KeyEnter))
+		_, _ = form.update(runes("second line"))
+		So(form.notes.Value(), ShouldEqual, "first line\nsecond line")
+
+		form.inputs[formPurchaseOrder].Blur()
+		form.focus = formSKU
+		form.inputs[formSKU].Focus()
+		_, _ = form.update(runes("WID"))
+		_, _ = form.update(modifiedKey('y', tea.ModCtrl))
+		So(form.inputs[formSKU].Value(), ShouldEqual, "WIDGET-42")
+	})
+
+	Convey("The table navigates, filters, sorts, shows details, and adapts columns", t, func() {
+		orders := newTableModel(80, 24)
+		So(orders.table.Rows(), ShouldHaveLength, 30)
+
+		orders.update(key(tea.KeyDown))
+		So(orders.table.Cursor(), ShouldEqual, 1)
+		orders.update(key(tea.KeyPgDown))
+		So(orders.table.Cursor(), ShouldBeGreaterThan, 1)
+		orders.update(key(tea.KeyHome))
+		So(orders.table.Cursor(), ShouldEqual, 0)
+		orders.update(key(tea.KeyDown))
+		orders.update(key(tea.KeyEnter))
+		So(orders.view(), ShouldContainSubstring, "ORDER DETAILS")
+		So(orders.view(), ShouldContainSubstring, "ORD-10002342")
+		orders.update(key(tea.KeyEsc))
+
+		orders.update(runes("/"))
+		orders.update(runes("SHIPPED"))
+		orders.update(key(tea.KeyEnter))
+		So(orders.table.Rows(), ShouldHaveLength, 7)
+		for _, row := range orders.table.Rows() {
+			So(row[2], ShouldEqual, "SHIPPED")
+		}
+
+		orders.update(runes("/"))
+		orders.update(key(tea.KeyEsc))
+		orders.update(runes("s"))
+		So(orders.sortField, ShouldEqual, 1)
+		So(orders.table.Rows()[0][2], ShouldEqual, "ALLOCATED")
+
+		orders.resize(48, 16)
+		So(orders.columns, ShouldEqual, 3)
+		So(orders.table.Rows()[0], ShouldHaveLength, 3)
+	})
+
+	Convey("Scrolling supports navigation, follow mode, and deterministic delayed streaming", t, func() {
+		log := newScrollingModel(80, 24)
+		So(log.events, ShouldHaveLength, 100)
+
+		_, _ = log.update(key(tea.KeyEnd))
+		So(log.cursor, ShouldEqual, 99)
+		_, _ = log.update(runes("f"))
+		_, _ = log.update(runes("a"))
+		So(log.cursor, ShouldEqual, 100)
+
+		_, command := log.update(runes("s"))
+		So(command, ShouldNotBeNil)
+		generation := log.generation
+		for range 5 {
+			_, command = log.update(scrollTickMsg{generation: generation})
+		}
+		So(command, ShouldBeNil)
+		So(log.events, ShouldHaveLength, 106)
+		So(log.status, ShouldEqual, "STREAM COMPLETE (5 EVENTS)")
+		So(log.cursor, ShouldEqual, 105)
+	})
+
+	Convey("Colors expose labeled indexed palettes and attributes without true color", t, func() {
+		view := newColorsModel(132, 24).view()
+
+		So(view, ShouldContainSubstring, "ANSI 8 COLORS (background)")
+		So(view, ShouldContainSubstring, "\x1b[48;5;196m")
+		So(view, ShouldContainSubstring, "BOLD")
+		So(view, ShouldContainSubstring, "CONCEAL")
+		So(view, ShouldNotContainSubstring, "38;2;")
+
+		terminal, err := xterm.New(132, 24)
+		So(err, ShouldBeNil)
+		_, err = terminal.Write([]byte(view))
+		So(err, ShouldBeNil)
+		found := false
+		for row := 0; row < 24; row++ {
+			column := strings.Index(terminal.Snapshot().Line(row), "196")
+			if column < 0 {
+				continue
+			}
+			cell, ok := terminal.Snapshot().CellAt(column, row)
+			So(ok, ShouldBeTrue)
+			So(cell.Foreground, ShouldEqual, tuicast.Color(15))
+			So(cell.Background, ShouldEqual, tuicast.Color(196))
+			found = true
+			break
+		}
+		So(found, ShouldBeTrue)
+	})
+
+	Convey("Cursor movement emits queryable position and visibility state", t, func() {
+		cursor := newCursorModel(80, 24)
+		So(cursor.column, ShouldEqual, 39)
+		So(cursor.row, ShouldEqual, 11)
+
+		_, _ = cursor.update(key(tea.KeyRight))
+		_, _ = cursor.update(key(tea.KeyF1))
+		_, _ = cursor.update(key(tea.KeyDown))
+		_, _ = cursor.update(key(tea.KeyF2))
+		So(cursor.column, ShouldEqual, 40)
+		So(cursor.row, ShouldEqual, 11)
 		application := newApplication()
-		application.Open()
+		application.page = pageCursor
+		application.cursor = cursor
+		So(application.View().Cursor.X, ShouldEqual, 40)
+		So(application.View().Cursor.Y, ShouldEqual, 11)
 
-		output := string(application.Handle([]byte("wrong\tsecret\r")))
-
-		So(output, ShouldContainSubstring, "Invalid user ID or password")
-		So(output, ShouldNotContainSubstring, "secret")
-		So(application.page, ShouldEqual, pageLogin)
-		So(application.password, ShouldBeEmpty)
+		_, _ = cursor.update(key(tea.KeyF3))
+		application.cursor = cursor
+		So(application.View().Cursor, ShouldBeNil)
 	})
 
-	Convey("Menu arrows select scenarios and F2 signs out", t, func() {
-		application := authenticatedApplication()
+	Convey("The key inspector reports function-key and modifier conventions", t, func() {
+		inspector := newKeyModel(80, 24)
+		inspector.update(key(tea.KeyF1))
+		inspector.update(key(tea.KeyF13))
+		inspector.update(modifiedKey(tea.KeyUp, tea.ModAlt))
+		inspector.update(modifiedKey('a', tea.ModCtrl))
+		inspector.updatePaste(tea.PasteMsg{Content: "résumé"})
 
-		output := string(application.Handle([]byte("\x1b[B\r")))
-		So(output, ShouldContainSubstring, "Forms and Input Fields scenario selected")
-
-		output = string(application.Handle([]byte("\x1bOQ")))
-		So(output, ShouldContainSubstring, "LOGIN / AUTHENTICATION")
-		So(output, ShouldContainSubstring, "Signed out")
-		So(application.page, ShouldEqual, pageLogin)
+		So(inspector.count, ShouldEqual, 5)
+		So(inspector.history[1], ShouldContainSubstring, "shift+f1 convention")
+		So(inspector.history[2], ShouldContainSubstring, "alt+up")
+		So(inspector.history[3], ShouldContainSubstring, "ctrl+a")
+		So(inspector.view(), ShouldContainSubstring, `paste "résumé"`)
 	})
 
-	Convey("Option 12 selects VTTEST without launching from Handle", t, func() {
+	Convey("Resize toggles between 80x24 and 132x24 while retaining state", t, func() {
+		resize := newResizeModel(80, 24)
+		resize.input.SetValue("keep me")
+		resize.update(key(tea.KeyDown))
+
+		resize.update(runes("t"))
+		So(resize.targetWidth, ShouldEqual, 132)
+		So(resize.view(), ShouldContainSubstring, "WAITING")
+		resize.resize(132, 24)
+		So(resize.view(), ShouldContainSubstring, "MATCH")
+		So(resize.input.Value(), ShouldEqual, "keep me")
+		So(resizeOrders[resize.selected], ShouldEqual, "ORD-10002342")
+
+		resize.update(runes("T"))
+		resize.resize(80, 24)
+		So(resize.view(), ShouldContainSubstring, "Target dimensions: 80x24")
+		So(resize.view(), ShouldContainSubstring, "MATCH")
+	})
+
+	Convey("Unicode samples and editable graphemes survive resizing", t, func() {
+		unicode := newUnicodeModel(80, 24)
+		unicode.update(runes("e\u0301漢🙂"))
+		So(unicode.view(), ShouldContainSubstring, "Expected width")
+		unicode.resize(45, 18)
+
+		So(unicode.input.Value(), ShouldEqual, "e\u0301漢🙂")
+		So(unicode.view(), ShouldContainSubstring, "Combining accent")
+		So(unicode.view(), ShouldContainSubstring, "👩‍💻")
+	})
+
+	Convey("VTTEST is launched through Bubble Tea's terminal handoff", t, func() {
 		application := authenticatedApplication()
-		application.selected = 11
 		runner := &recordingVTTestRunner{}
 		application.SetVTTestRunner(runner)
+		application.selected = len(menuItems) - 1
 
-		output := string(application.Handle([]byte("\r")))
+		_, command := application.Update(key(tea.KeyEnter))
 
-		So(output, ShouldContainSubstring, "Launching VTTEST")
-		So(application.launchVTTest, ShouldBeTrue)
+		So(command, ShouldNotBeNil)
 		So(runner.calls, ShouldEqual, 0)
+
+		var output bytes.Buffer
+		executable := &vtTestExecCommand{runner: runner}
+		executable.SetStdin(strings.NewReader(""))
+		executable.SetStdout(&output)
+		So(executable.Run(), ShouldBeNil)
+		So(output.String(), ShouldEqual, "[VTTEST]")
 	})
 
-	Convey("Run suspends and resumes its screen around an injected VTTEST", t, func() {
+	Convey("VTTEST availability and fatal lifecycle errors remain distinct", t, func() {
 		application := newApplication()
-		runner := &recordingVTTestRunner{}
-		application.SetVTTestRunner(runner)
-		input := &fragmentReader{fragments: [][]byte{
-			[]byte("operator\tcasting\x1bOP" + strings.Repeat("\x1b[B", 11) + "\r"),
-			[]byte("\x03"),
-		}}
+
+		command := &vtTestExecCommand{runner: &recordingVTTestRunner{err: fmt.Errorf("not installed")}}
+		command.SetStdin(strings.NewReader(""))
+		command.SetStdout(io.Discard)
+		err := command.Run()
+		application.finishVTTest(err)
+		So(application.message, ShouldContainSubstring, "VTTEST unavailable: not installed")
+		So(application.runErr, ShouldBeNil)
+
+		fatal := &FatalVTTestError{Err: fmt.Errorf("terminal restore failed")}
+		application.finishVTTest(fatal)
+		So(application.runErr, ShouldNotBeNil)
+	})
+
+	Convey("Run delegates terminal lifecycle to Bubble Tea", t, func() {
+		application := newApplication()
 		var output bytes.Buffer
 
-		err := application.Run(input, &output)
+		err := application.Run(&pacedReader{fragments: [][]byte{[]byte("\x03")}}, &output)
 
 		So(err, ShouldBeNil)
-		So(runner.calls, ShouldEqual, 1)
-		So(output.String(), ShouldContainSubstring,
-			"\x1b[0m\x1b[?25h\x1b[?1049l[VTTEST]\x1b[?1049h")
-		So(output.String(), ShouldContainSubstring, "VTTEST completed")
+		So(output.String(), ShouldContainSubstring, "\x1b[?1049h")
+		So(output.String(), ShouldContainSubstring, "LOGIN / AUTHENTICATION")
+		So(output.String(), ShouldContainSubstring, "\x1b[?1049l")
 	})
+}
 
-	Convey("A VTTEST launch failure is reported in-app and the screen resumes", t, func() {
-		application := newApplication()
-		application.SetVTTestRunner(&recordingVTTestRunner{err: fmt.Errorf("not installed")})
-		application.page = pageMenu
-		application.selected = 11
-		input := &fragmentReader{fragments: [][]byte{[]byte("\r"), []byte("\x03")}}
-		var output bytes.Buffer
+func key(code rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: code}
+}
 
-		err := application.Run(input, &output)
+func runes(value string) tea.KeyPressMsg {
+	code := tea.KeyExtended
+	if characters := []rune(value); len(characters) == 1 {
+		code = characters[0]
+	}
+	return tea.KeyPressMsg{Code: code, Text: value}
+}
 
-		So(err, ShouldBeNil)
-		So(output.String(), ShouldContainSubstring, "VTTEST unavailable: not installed")
-		So(output.String(), ShouldContainSubstring, "\x1b[?1049l[VTTEST]\x1b[?1049h")
-	})
-
-	Convey("A fatal VTTEST terminal lifecycle failure stops the application", t, func() {
-		application := newApplication()
-		application.SetVTTestRunner(&recordingVTTestRunner{
-			err: &FatalVTTestError{Err: fmt.Errorf("raw mode unavailable")},
-		})
-		application.page = pageMenu
-		application.selected = 11
-		input := &fragmentReader{fragments: [][]byte{[]byte("\r")}}
-		var output bytes.Buffer
-
-		err := application.Run(input, &output)
-
-		So(err, ShouldNotBeNil)
-		So(err.Error(), ShouldContainSubstring, "raw mode unavailable")
-		So(output.String(), ShouldNotContainSubstring, "VTTEST unavailable")
-	})
-
-	Convey("Run restores the primary screen at end-of-file", t, func() {
-		application := newApplication()
-		var output bytes.Buffer
-
-		err := application.Run(strings.NewReader(""), &output)
-
-		So(err, ShouldBeNil)
-		So(output.String(), ShouldStartWith, "\x1b[?1049h")
-		So(output.String(), ShouldEndWith, "\x1b[0m\x1b[?25h\x1b[?1049l")
-	})
+func modifiedKey(code rune, modifier tea.KeyMod) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: code, Mod: modifier}
 }
 
 type recordingVTTestRunner struct {
 	calls int
 	err   error
+}
+
+type pacedReader struct {
+	fragments [][]byte
+}
+
+func (r *pacedReader) Read(data []byte) (int, error) {
+	time.Sleep(200 * time.Millisecond)
+	if len(r.fragments) == 0 {
+		return 0, io.EOF
+	}
+	fragment := r.fragments[0]
+	r.fragments = r.fragments[1:]
+	return copy(data, fragment), nil
 }
 
 func (r *recordingVTTestRunner) Run(_ io.Reader, output io.Writer) error {
@@ -162,19 +399,6 @@ func (r *recordingVTTestRunner) Run(_ io.Reader, output io.Writer) error {
 	return r.err
 }
 
-type fragmentReader struct {
-	fragments [][]byte
-}
-
-func (r *fragmentReader) Read(data []byte) (int, error) {
-	if len(r.fragments) == 0 {
-		return 0, io.EOF
-	}
-	fragment := r.fragments[0]
-	r.fragments = r.fragments[1:]
-	return copy(data, fragment), nil
-}
-
 func newApplication() *Application {
 	application, err := New(80, 24)
 	So(err, ShouldBeNil)
@@ -183,8 +407,9 @@ func newApplication() *Application {
 
 func authenticatedApplication() *Application {
 	application := newApplication()
-	application.Open()
-	application.Handle([]byte("operator\tcasting\x1bOP"))
+	application.loginInputs[0].SetValue(loginUser)
+	application.loginInputs[1].SetValue(loginPassword)
+	application.authenticate()
 	So(application.page, ShouldEqual, pageMenu)
 	return application
 }
