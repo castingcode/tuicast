@@ -1,0 +1,580 @@
+{
+  "$schema": "https://github.com/open-rpc/meta-schema/releases/download/1.14.9/open-rpc-meta-schema.json",
+  "openrpc": "1.3.2",
+  "info": {
+    "title": "TUICast Driver API",
+    "description": "TUICast's language-neutral JSON-RPC 2.0 interface over standard input and standard output. Parameters are passed by name. Requests may execute concurrently and responses can arrive out of order.",
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/castingcode/tuicast/blob/main/LICENSE"
+    },
+    "version": "1"
+  },
+  "externalDocs": {
+    "description": "TUICast driver protocol documentation",
+    "url": "https://github.com/castingcode/tuicast/blob/main/docs/driver.md"
+  },
+  "servers": [
+    {
+      "name": "stdio",
+      "summary": "One driver process connected through stdin and stdout",
+      "description": "Input accepts consecutive JSON-RPC objects separated by whitespace. Output contains one JSON object per line.",
+      "url": "stdio://tuicast-driver"
+    }
+  ],
+  "methods": [
+    {
+      "name": "driver.ping",
+      "summary": "Report the driver protocol version",
+      "paramStructure": "by-name",
+      "params": [],
+      "result": {
+        "name": "pingResult",
+        "schema": { "$ref": "#/components/schemas/PingResult" }
+      }
+    },
+    {
+      "name": "driver.shutdown",
+      "summary": "Close all objects and stop the driver",
+      "description": "Closes subscriptions, sessions, and connections before the process exits.",
+      "paramStructure": "by-name",
+      "params": [],
+      "result": {
+        "name": "shutdownResult",
+        "schema": { "$ref": "#/components/schemas/ShutdownResult" }
+      }
+    },
+    {
+      "name": "connection.open",
+      "summary": "Open an SSH or Telnet connection",
+      "description": "SSH requires username, at least one authentication option, and exactly one host-key verification option. Secrets are never returned or logged.",
+      "paramStructure": "by-name",
+      "params": [
+        { "$ref": "#/components/contentDescriptors/protocol" },
+        { "$ref": "#/components/contentDescriptors/address" },
+        { "$ref": "#/components/contentDescriptors/username" },
+        { "$ref": "#/components/contentDescriptors/password" },
+        { "$ref": "#/components/contentDescriptors/privateKey" },
+        { "$ref": "#/components/contentDescriptors/privateKeyPassphrase" },
+        { "$ref": "#/components/contentDescriptors/knownHostsFile" },
+        { "$ref": "#/components/contentDescriptors/hostKeyFingerprint" },
+        { "$ref": "#/components/contentDescriptors/insecureSkipHostKeyCheck" },
+        { "$ref": "#/components/contentDescriptors/connectTimeoutMilliseconds" }
+      ],
+      "result": {
+        "name": "connection",
+        "schema": { "$ref": "#/components/schemas/ConnectionResult" }
+      },
+      "errors": [{ "$ref": "#/components/errors/ApplicationError" }]
+    },
+    {
+      "name": "connection.close",
+      "summary": "Close a connection and all its sessions",
+      "paramStructure": "by-name",
+      "params": [{ "$ref": "#/components/contentDescriptors/connectionId" }],
+      "result": {
+        "name": "closeResult",
+        "schema": { "$ref": "#/components/schemas/ClosedResult" }
+      },
+      "errors": [{ "$ref": "#/components/errors/ApplicationError" }]
+    },
+    {
+      "name": "session.open",
+      "summary": "Open a terminal session on a connection",
+      "paramStructure": "by-name",
+      "params": [
+        { "$ref": "#/components/contentDescriptors/connectionId" },
+        { "$ref": "#/components/contentDescriptors/terminal" },
+        { "$ref": "#/components/contentDescriptors/width" },
+        { "$ref": "#/components/contentDescriptors/height" },
+        { "$ref": "#/components/contentDescriptors/answerback" }
+      ],
+      "result": {
+        "name": "session",
+        "schema": { "$ref": "#/components/schemas/SessionResult" }
+      },
+      "errors": [{ "$ref": "#/components/errors/ApplicationError" }]
+    },
+    {
+      "name": "session.close",
+      "summary": "Close a terminal session",
+      "paramStructure": "by-name",
+      "params": [{ "$ref": "#/components/contentDescriptors/sessionId" }],
+      "result": {
+        "name": "closeResult",
+        "schema": { "$ref": "#/components/schemas/ClosedResult" }
+      },
+      "errors": [{ "$ref": "#/components/errors/ApplicationError" }]
+    },
+    {
+      "name": "session.send",
+      "summary": "Send text or bytes to a session",
+      "description": "Exactly one of text or base64 must be supplied.",
+      "paramStructure": "by-name",
+      "params": [
+        { "$ref": "#/components/contentDescriptors/sessionId" },
+        { "$ref": "#/components/contentDescriptors/text" },
+        { "$ref": "#/components/contentDescriptors/base64" }
+      ],
+      "result": {
+        "name": "sendResult",
+        "schema": { "$ref": "#/components/schemas/SendResult" }
+      },
+      "errors": [{ "$ref": "#/components/errors/ApplicationError" }]
+    },
+    {
+      "name": "session.press",
+      "summary": "Send a named or printable terminal key",
+      "paramStructure": "by-name",
+      "params": [
+        { "$ref": "#/components/contentDescriptors/sessionId" },
+        { "$ref": "#/components/contentDescriptors/key" },
+        { "$ref": "#/components/contentDescriptors/modifiers" }
+      ],
+      "result": {
+        "name": "pressResult",
+        "schema": { "$ref": "#/components/schemas/SentResult" }
+      },
+      "errors": [{ "$ref": "#/components/errors/ApplicationError" }]
+    },
+    {
+      "name": "session.resize",
+      "summary": "Resize the remote and emulated terminals",
+      "paramStructure": "by-name",
+      "params": [
+        { "$ref": "#/components/contentDescriptors/sessionId" },
+        { "$ref": "#/components/contentDescriptors/width" },
+        { "$ref": "#/components/contentDescriptors/height" }
+      ],
+      "result": {
+        "name": "resizeResult",
+        "schema": { "$ref": "#/components/schemas/ResizedResult" }
+      },
+      "errors": [{ "$ref": "#/components/errors/ApplicationError" }]
+    },
+    {
+      "name": "session.screen",
+      "summary": "Return the current detached screen snapshot",
+      "description": "The driver also uses this method name for subscription notifications; notification params additionally contain subscriptionId and a nested screen.",
+      "paramStructure": "by-name",
+      "params": [{ "$ref": "#/components/contentDescriptors/sessionId" }],
+      "result": {
+        "name": "screen",
+        "schema": { "$ref": "#/components/schemas/Screen" }
+      }
+    },
+    {
+      "name": "session.wait",
+      "summary": "Wait for a matching screen",
+      "description": "A positive stableMilliseconds waits for a host-output quiet period after the matcher first succeeds.",
+      "paramStructure": "by-name",
+      "params": [
+        { "$ref": "#/components/contentDescriptors/sessionId" },
+        { "$ref": "#/components/contentDescriptors/matcher" },
+        { "$ref": "#/components/contentDescriptors/timeoutMilliseconds" },
+        { "$ref": "#/components/contentDescriptors/stableMilliseconds" }
+      ],
+      "result": {
+        "name": "screen",
+        "schema": { "$ref": "#/components/schemas/Screen" }
+      },
+      "errors": [{ "$ref": "#/components/errors/ApplicationError" }]
+    },
+    {
+      "name": "session.subscribe",
+      "summary": "Subscribe to coalesced screen revisions",
+      "description": "After returning the subscription ID, the driver emits session.screen notifications beginning with the current snapshot.",
+      "paramStructure": "by-name",
+      "params": [{ "$ref": "#/components/contentDescriptors/sessionId" }],
+      "result": {
+        "name": "subscription",
+        "schema": { "$ref": "#/components/schemas/SubscriptionResult" }
+      }
+    },
+    {
+      "name": "session.subscribeEvents",
+      "summary": "Subscribe to terminal BELL and ENQ events",
+      "description": "After returning the subscription ID, the driver emits session.event notifications.",
+      "paramStructure": "by-name",
+      "params": [{ "$ref": "#/components/contentDescriptors/sessionId" }],
+      "result": {
+        "name": "subscription",
+        "schema": { "$ref": "#/components/schemas/SubscriptionResult" }
+      }
+    },
+    {
+      "name": "session.unsubscribe",
+      "summary": "Cancel a screen or event subscription",
+      "paramStructure": "by-name",
+      "params": [{ "$ref": "#/components/contentDescriptors/subscriptionId" }],
+      "result": {
+        "name": "unsubscribeResult",
+        "schema": { "$ref": "#/components/schemas/UnsubscribedResult" }
+      }
+    }
+  ],
+  "components": {
+    "errors": {
+      "ApplicationError": {
+        "code": -32000,
+        "message": "Application error"
+      }
+    },
+    "contentDescriptors": {
+      "protocol": {
+        "name": "protocol",
+        "required": true,
+        "schema": { "type": "string", "enum": ["ssh", "telnet"] }
+      },
+      "address": {
+        "name": "address",
+        "description": "Remote host and port, such as wms.example.test:23.",
+        "required": true,
+        "schema": { "type": "string", "minLength": 1 }
+      },
+      "username": {
+        "name": "username",
+        "description": "Required for SSH.",
+        "schema": { "type": "string" }
+      },
+      "password": {
+        "name": "password",
+        "description": "SSH password. SSH requires password or privateKey.",
+        "schema": { "type": "string" }
+      },
+      "privateKey": {
+        "name": "privateKey",
+        "description": "PEM-encoded SSH private key. SSH requires privateKey or password.",
+        "schema": { "type": "string" }
+      },
+      "privateKeyPassphrase": {
+        "name": "privateKeyPassphrase",
+        "description": "Passphrase for an encrypted privateKey.",
+        "schema": { "type": "string" }
+      },
+      "knownHostsFile": {
+        "name": "knownHostsFile",
+        "description": "Driver-local known_hosts path. SSH requires exactly one host-key verification option.",
+        "schema": { "type": "string" }
+      },
+      "hostKeyFingerprint": {
+        "name": "hostKeyFingerprint",
+        "description": "Expected SHA-256 SSH host-key fingerprint. SSH requires exactly one host-key verification option.",
+        "schema": { "type": "string" }
+      },
+      "insecureSkipHostKeyCheck": {
+        "name": "insecureSkipHostKeyCheck",
+        "description": "Explicit host-key verification opt-out for controlled tests. SSH requires exactly one host-key verification option.",
+        "schema": { "type": "boolean", "default": false }
+      },
+      "connectTimeoutMilliseconds": {
+        "name": "connectTimeoutMilliseconds",
+        "description": "Connection timeout. Zero or omission uses 30000 milliseconds.",
+        "schema": { "type": "integer", "minimum": 0, "format": "int64" }
+      },
+      "connectionId": {
+        "name": "connectionId",
+        "required": true,
+        "schema": { "$ref": "#/components/schemas/Identifier" }
+      },
+      "sessionId": {
+        "name": "sessionId",
+        "required": true,
+        "schema": { "$ref": "#/components/schemas/Identifier" }
+      },
+      "subscriptionId": {
+        "name": "subscriptionId",
+        "required": true,
+        "schema": { "$ref": "#/components/schemas/Identifier" }
+      },
+      "terminal": {
+        "name": "terminal",
+        "required": true,
+        "schema": { "type": "string", "enum": ["vt220", "xterm-256color"] }
+      },
+      "width": {
+        "name": "width",
+        "required": true,
+        "schema": { "type": "integer", "minimum": 1 }
+      },
+      "height": {
+        "name": "height",
+        "required": true,
+        "schema": { "type": "integer", "minimum": 1 }
+      },
+      "answerback": {
+        "name": "answerback",
+        "description": "Printable ASCII answerback sent automatically on ENQ, up to 20 bytes.",
+        "schema": { "type": "string", "maxLength": 20, "pattern": "^[ -~]*$" }
+      },
+      "text": {
+        "name": "text",
+        "description": "UTF-8 text payload. Exactly one of text or base64 is required.",
+        "schema": { "type": "string" }
+      },
+      "base64": {
+        "name": "base64",
+        "description": "Base64-encoded byte payload. Exactly one of base64 or text is required.",
+        "schema": { "type": "string", "contentEncoding": "base64" }
+      },
+      "key": {
+        "name": "key",
+        "description": "A supported named key or one printable character.",
+        "required": true,
+        "schema": { "$ref": "#/components/schemas/Key" }
+      },
+      "modifiers": {
+        "name": "modifiers",
+        "schema": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["Shift", "Control", "Alt", "Meta"] }
+        }
+      },
+      "matcher": {
+        "name": "matcher",
+        "required": true,
+        "schema": { "$ref": "#/components/schemas/Matcher" }
+      },
+      "timeoutMilliseconds": {
+        "name": "timeoutMilliseconds",
+        "required": true,
+        "schema": { "type": "integer", "minimum": 1, "format": "int64" }
+      },
+      "stableMilliseconds": {
+        "name": "stableMilliseconds",
+        "schema": { "type": "integer", "minimum": 0, "format": "int64", "default": 0 }
+      }
+    },
+    "schemas": {
+      "Identifier": {
+        "type": "integer",
+        "minimum": 1,
+        "format": "uint64"
+      },
+      "PingResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolVersion"],
+        "properties": { "protocolVersion": { "type": "string", "const": "1" } }
+      },
+      "ShutdownResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["shuttingDown"],
+        "properties": { "shuttingDown": { "type": "boolean", "const": true } }
+      },
+      "ConnectionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["connectionId"],
+        "properties": { "connectionId": { "$ref": "#/components/schemas/Identifier" } }
+      },
+      "SessionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sessionId"],
+        "properties": { "sessionId": { "$ref": "#/components/schemas/Identifier" } }
+      },
+      "SubscriptionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["subscriptionId"],
+        "properties": { "subscriptionId": { "$ref": "#/components/schemas/Identifier" } }
+      },
+      "ClosedResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["closed"],
+        "properties": { "closed": { "type": "boolean", "const": true } }
+      },
+      "SendResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bytesSent"],
+        "properties": { "bytesSent": { "type": "integer", "minimum": 0 } }
+      },
+      "SentResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sent"],
+        "properties": { "sent": { "type": "boolean", "const": true } }
+      },
+      "ResizedResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resized"],
+        "properties": { "resized": { "type": "boolean", "const": true } }
+      },
+      "UnsubscribedResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["unsubscribed"],
+        "properties": { "unsubscribed": { "type": "boolean", "const": true } }
+      },
+      "Key": {
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "Enter", "Tab", "Backspace", "Escape", "ArrowUp", "ArrowDown",
+              "ArrowRight", "ArrowLeft", "Home", "End", "Insert", "Delete",
+              "PageUp", "PageDown", "F1", "F2", "F3", "F4", "F5", "F6",
+              "F7", "F8", "F9", "F10", "F11", "F12"
+            ]
+          },
+          { "type": "string", "minLength": 1, "maxLength": 1 }
+        ]
+      },
+      "Matcher": {
+        "description": "Exactly one matcher expression. Matcher nesting is limited to 64 levels.",
+        "oneOf": [
+          { "$ref": "#/components/schemas/ContainsMatcher" },
+          { "$ref": "#/components/schemas/LineMatcher" },
+          { "$ref": "#/components/schemas/CursorMatcher" },
+          { "$ref": "#/components/schemas/AllMatcher" },
+          { "$ref": "#/components/schemas/AnyMatcher" },
+          { "$ref": "#/components/schemas/NotMatcher" }
+        ]
+      },
+      "ContainsMatcher": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["contains"],
+        "properties": { "contains": { "type": "string" } }
+      },
+      "LineMatcher": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["line"],
+        "properties": {
+          "line": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["row", "text"],
+            "properties": {
+              "row": { "type": "integer", "minimum": 0 },
+              "text": { "type": "string" }
+            }
+          }
+        }
+      },
+      "CursorMatcher": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cursor"],
+        "properties": {
+          "cursor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["column", "row"],
+            "properties": {
+              "column": { "type": "integer", "minimum": 0 },
+              "row": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      },
+      "AllMatcher": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["all"],
+        "properties": {
+          "all": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/components/schemas/Matcher" }
+          }
+        }
+      },
+      "AnyMatcher": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["any"],
+        "properties": {
+          "any": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/components/schemas/Matcher" }
+          }
+        }
+      },
+      "NotMatcher": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["not"],
+        "properties": { "not": { "$ref": "#/components/schemas/Matcher" } }
+      },
+      "Screen": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["width", "height", "cells", "cursor", "revision", "text"],
+        "properties": {
+          "width": { "type": "integer", "minimum": 1 },
+          "height": { "type": "integer", "minimum": 1 },
+          "cells": {
+            "description": "Row-major terminal cells.",
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Cell" }
+          },
+          "cursor": { "$ref": "#/components/schemas/Cursor" },
+          "revision": { "type": "integer", "minimum": 0, "format": "uint64" },
+          "text": { "type": "string" }
+        }
+      },
+      "Cell": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "width", "foreground", "background", "attributes"],
+        "properties": {
+          "text": { "type": "string" },
+          "width": { "type": "integer", "minimum": 0 },
+          "foreground": { "type": "integer", "minimum": -1 },
+          "background": { "type": "integer", "minimum": -1 },
+          "attributes": { "type": "integer", "minimum": 0, "maximum": 65535 }
+        }
+      },
+      "Cursor": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["column", "row", "visible"],
+        "properties": {
+          "column": { "type": "integer", "minimum": 0 },
+          "row": { "type": "integer", "minimum": 0 },
+          "visible": { "type": "boolean" }
+        }
+      },
+      "ScreenNotificationParams": {
+        "description": "Params emitted in a session.screen notification after session.subscribe.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["subscriptionId", "sessionId", "screen"],
+        "properties": {
+          "subscriptionId": { "$ref": "#/components/schemas/Identifier" },
+          "sessionId": { "$ref": "#/components/schemas/Identifier" },
+          "screen": { "$ref": "#/components/schemas/Screen" }
+        }
+      },
+      "TerminalEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sequence", "type"],
+        "properties": {
+          "sequence": { "type": "integer", "minimum": 1, "format": "uint64" },
+          "type": { "type": "string", "enum": ["bell", "enquiry"] },
+          "data": { "type": "string", "description": "Configured answerback for enquiry events." }
+        }
+      },
+      "EventNotificationParams": {
+        "description": "Params emitted in a session.event notification after session.subscribeEvents.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["subscriptionId", "sessionId", "event"],
+        "properties": {
+          "subscriptionId": { "$ref": "#/components/schemas/Identifier" },
+          "sessionId": { "$ref": "#/components/schemas/Identifier" },
+          "event": { "$ref": "#/components/schemas/TerminalEvent" }
+        }
+      }
+    }
+  }
+}

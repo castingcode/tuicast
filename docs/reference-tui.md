@@ -27,8 +27,7 @@ Password: casting
 
 The login page accepts Tab, Shift-Tab, or arrow keys to change fields, Enter or
 F1 to log in, and F2 to clear the form. The authenticated menu supports Up/Down,
-Enter/F1, and F2 to sign out. Options 2 through 7 and 10 through 12 are
-implemented; the other menu destinations remain placeholders.
+Enter/F1, and F2 to sign out. All menu destinations are implemented.
 
 ## Forms and Input Fields
 
@@ -83,6 +82,34 @@ The display reports explicit modifiers when available and recognizes F13
 through F24 as the legacy Shift-F1 through Shift-F12 convention rather than
 treating those values as unrelated keys.
 
+## Partial Screen Updates
+
+Option 8 provides three deterministic timed scenarios. The premature-ready
+scenario displays `READY` before the rest of the screen has arrived, ignores
+input during that interval, and eventually reaches `SCREEN COMPLETE / INPUT
+ENABLED`. It is intended to distinguish a basic text wait from a stable-screen
+wait that observes the host-output quiet period.
+
+The independent-regions scenario updates its header, order, counters, and
+footer in a deliberately non-sequential order. The in-place progress scenario
+repeatedly rewrites a spinner, percentage, progress bar, and status before
+reaching `COMPLETE`. Bubble Tea emits these changes as cursor-positioned
+differential frames rather than repainting unchanged cells.
+
+## Long-Running Operation
+
+Option 9 provides three lifecycle modes. The finite warehouse wave processes
+120 records over approximately ten seconds and reaches `OPERATION COMPLETE`.
+The continuous soak mode runs until stopped and bounds its displayed event
+history to eight entries. The failure simulation deterministically stops at
+60% with error code `E-WAVE-060`.
+
+All modes remain responsive to terminal resize and support pause/resume,
+cancellation, and retry where applicable. Their counters, heartbeats, result
+states, and failure point are deterministic so automation can make exact
+assertions. Unit tests inject tick messages directly rather than waiting for
+wall-clock durations.
+
 ## Terminal Resize
 
 Option 10 shows actual and target dimensions, resize-event count, responsive
@@ -133,5 +160,4 @@ representative terminal traffic than a purpose-built renderer alone. The
 reference data and workflow remain local and deterministic so automation does
 not depend on timing, a network service, or random input.
 
-The remaining placeholder scenarios are controlled partial-screen updates and
-a long-running operation.
+All scenarios described by the reference menu are now implemented.

@@ -29,6 +29,8 @@ const (
 	pageColors
 	pageCursor
 	pageKeys
+	pagePartial
+	pageLongRunning
 	pageResize
 	pageUnicode
 )
@@ -74,6 +76,8 @@ type Application struct {
 	colors      colorsModel
 	cursor      cursorModel
 	keys        keyModel
+	partial     partialModel
+	longRunning longRunningModel
 	resizeDemo  resizeModel
 	unicode     unicodeModel
 	vtTest      VTTestRunner
@@ -110,6 +114,8 @@ func New(width, height int) (*Application, error) {
 		colors:      newColorsModel(width, height),
 		cursor:      newCursorModel(width, height),
 		keys:        newKeyModel(width, height),
+		partial:     newPartialModel(width, height),
+		longRunning: newLongRunningModel(width, height),
 		resizeDemo:  newResizeModel(width, height),
 		unicode:     newUnicodeModel(width, height),
 		vtTest:      CommandVTTestRunner{},
@@ -168,6 +174,18 @@ func (a *Application) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return a, command
 		}
 		return a, nil
+	case partialTickMsg:
+		if a.page == pagePartial {
+			_, command := a.partial.update(message)
+			return a, command
+		}
+		return a, nil
+	case longRunningTickMsg:
+		if a.page == pageLongRunning {
+			_, command := a.longRunning.update(message)
+			return a, command
+		}
+		return a, nil
 	case tea.PasteMsg:
 		return a, a.updatePaste(message)
 	case tea.KeyPressMsg:
@@ -214,6 +232,18 @@ func (a *Application) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				a.completeScenario("Function Keys")
 			}
 			return a, nil
+		case pagePartial:
+			back, command := a.partial.update(message)
+			if back {
+				a.completeScenario("Partial Screen Updates")
+			}
+			return a, command
+		case pageLongRunning:
+			back, command := a.longRunning.update(message)
+			if back {
+				a.completeScenario("Long Running Operation")
+			}
+			return a, command
 		case pageResize:
 			if a.resizeDemo.update(message) {
 				a.completeScenario("Terminal Resize")
@@ -272,6 +302,10 @@ func (a *Application) View() tea.View {
 		body = a.cursor.view()
 	case pageKeys:
 		body = a.keys.view()
+	case pagePartial:
+		body = a.partial.view()
+	case pageLongRunning:
+		body = a.longRunning.view()
 	case pageResize:
 		body = a.resizeDemo.view()
 	case pageUnicode:
@@ -345,6 +379,12 @@ func (a *Application) updateMenu(key tea.KeyPressMsg) tea.Cmd {
 		case 6:
 			a.keys = newKeyModel(a.width, a.height)
 			a.page = pageKeys
+		case 7:
+			a.partial = newPartialModel(a.width, a.height)
+			a.page = pagePartial
+		case 8:
+			a.longRunning = newLongRunningModel(a.width, a.height)
+			a.page = pageLongRunning
 		case 9:
 			a.resizeDemo = newResizeModel(a.width, a.height)
 			a.page = pageResize
@@ -433,6 +473,8 @@ func (a *Application) resize(width, height int) {
 	a.colors.resize(width, height)
 	a.cursor.resize(width, height)
 	a.keys.resize(width, height)
+	a.partial.resize(width, height)
+	a.longRunning.resize(width, height)
 	a.resizeDemo.resize(width, height)
 	a.unicode.resize(width, height)
 }

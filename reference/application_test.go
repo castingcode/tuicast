@@ -89,6 +89,8 @@ func TestApplication(t *testing.T) {
 			{4, pageColors, "ANSI COLORS AND ATTRIBUTES"},
 			{5, pageCursor, "CURSOR MOVEMENT"},
 			{6, pageKeys, "FUNCTION KEYS"},
+			{7, pagePartial, "PARTIAL SCREEN UPDATES"},
+			{8, pageLongRunning, "LONG-RUNNING OPERATION"},
 			{9, pageResize, "TERMINAL RESIZE"},
 			{10, pageUnicode, "UNICODE ALIGNMENT"},
 		}
@@ -276,6 +278,97 @@ func TestApplication(t *testing.T) {
 		So(inspector.history[2], ShouldContainSubstring, "alt+up")
 		So(inspector.history[3], ShouldContainSubstring, "ctrl+a")
 		So(inspector.view(), ShouldContainSubstring, `paste "résumé"`)
+	})
+
+	Convey("Partial updates expose premature readiness and gate input until completion", t, func() {
+		partial := newPartialModel(80, 24)
+		_, command := partial.update(runes("1"))
+		So(command, ShouldNotBeNil)
+
+		_, _ = partial.update(partialTickMsg{generation: partial.generation})
+		So(partial.view(), ShouldContainSubstring, "READY")
+		So(partial.view(), ShouldNotContainSubstring, "SCREEN COMPLETE")
+		_, _ = partial.update(runes("x"))
+		So(partial.ignored, ShouldEqual, 1)
+
+		for partial.running {
+			_, _ = partial.update(partialTickMsg{generation: partial.generation})
+		}
+		So(partial.view(), ShouldContainSubstring, "SCREEN COMPLETE / INPUT ENABLED")
+		_, _ = partial.update(runes("A"))
+		So(partial.accepted, ShouldEqual, "A")
+		So(partial.view(), ShouldContainSubstring, "Ignored early key events: 1")
+	})
+
+	Convey("Partial updates exercise independent regions and in-place progress", t, func() {
+		partial := newPartialModel(80, 24)
+		_, _ = partial.update(runes("2"))
+		for partial.running {
+			_, _ = partial.update(partialTickMsg{generation: partial.generation})
+		}
+		So(partial.view(), ShouldContainSubstring, "WAVE-17 ACTIVE")
+		So(partial.view(), ShouldContainSubstring, "ORD-10002342 / SHIPPED")
+		So(partial.view(), ShouldContainSubstring, "REGIONS COMPLETE")
+
+		_, _ = partial.update(runes("3"))
+		for partial.running {
+			_, _ = partial.update(partialTickMsg{generation: partial.generation})
+		}
+		So(partial.view(), ShouldContainSubstring, "[##########] 100%")
+		So(partial.view(), ShouldContainSubstring, "Status: COMPLETE")
+	})
+
+	Convey("The finite operation completes and preserves deterministic totals", t, func() {
+		operation := newLongRunningModel(80, 24)
+		_, command := operation.update(runes("1"))
+		So(command, ShouldNotBeNil)
+		for operation.running {
+			_, _ = operation.update(longRunningTickMsg{generation: operation.generation})
+		}
+
+		So(operation.heartbeats, ShouldEqual, 40)
+		So(operation.processed, ShouldEqual, 120)
+		So(operation.succeeded, ShouldEqual, 116)
+		So(operation.failed, ShouldEqual, 4)
+		So(operation.remaining, ShouldEqual, 0)
+		So(operation.status, ShouldEqual, "OPERATION COMPLETE")
+		So(operation.events, ShouldHaveLength, 8)
+	})
+
+	Convey("The continuous operation pauses, resumes, bounds history, and stops", t, func() {
+		operation := newLongRunningModel(80, 24)
+		_, _ = operation.update(runes("2"))
+		staleGeneration := operation.generation
+		_, _ = operation.update(runes("p"))
+		_, _ = operation.update(longRunningTickMsg{generation: staleGeneration})
+		So(operation.processed, ShouldEqual, 0)
+		So(operation.status, ShouldEqual, "OPERATION PAUSED")
+
+		_, command := operation.update(runes("P"))
+		So(command, ShouldNotBeNil)
+		for range 40 {
+			_, _ = operation.update(longRunningTickMsg{generation: operation.generation})
+		}
+		So(operation.events, ShouldHaveLength, 8)
+		operation.resize(132, 24)
+		So(operation.processed, ShouldEqual, 40)
+		_, _ = operation.update(runes("s"))
+		So(operation.status, ShouldEqual, "SESSION STOPPED")
+		So(operation.running, ShouldBeFalse)
+	})
+
+	Convey("The failure operation stops at its documented error", t, func() {
+		operation := newLongRunningModel(80, 24)
+		_, _ = operation.update(runes("3"))
+		for operation.running {
+			_, _ = operation.update(longRunningTickMsg{generation: operation.generation})
+		}
+
+		So(operation.processed, ShouldEqual, 60)
+		So(operation.succeeded, ShouldEqual, 59)
+		So(operation.failed, ShouldEqual, 1)
+		So(operation.remaining, ShouldEqual, 40)
+		So(operation.status, ShouldEqual, "OPERATION FAILED / E-WAVE-060")
 	})
 
 	Convey("Resize toggles between 80x24 and 132x24 while retaining state", t, func() {

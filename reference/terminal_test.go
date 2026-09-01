@@ -89,6 +89,34 @@ func TestReferenceTerminalCompatibility(t *testing.T) {
 		So(snapshot.Cursor.Row, ShouldEqual, 11)
 		So(snapshot.Cursor.Visible, ShouldBeTrue)
 	})
+
+	Convey("Partial-screen scenarios produce staged differential frames", t, func() {
+		application, err := reference.New(80, 24)
+		So(err, ShouldBeNil)
+		var transcript bytes.Buffer
+
+		err = application.Run(&pacedReader{fragments: [][]byte{
+			[]byte("operator\tcasting\x1bOP"),
+			[]byte("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r"),
+			[]byte("1"),
+			[]byte("x"),
+			[]byte("\x03"),
+		}}, &transcript)
+		So(err, ShouldBeNil)
+		output := transcript.String()
+		So(output, ShouldContainSubstring, "READY")
+		So(output, ShouldContainSubstring, "SCREEN COMPLETE / INPUT ENABLED")
+		So(output, ShouldContainSubstring, "Ignored early key events: 1")
+		So(strings.Count(output, "PARTIAL SCREEN UPDATES"), ShouldEqual, 1)
+
+		beforeExit := strings.LastIndex(output, "\x1b[>4m")
+		So(beforeExit, ShouldBeGreaterThan, 0)
+		terminal, err := xterm.New(80, 24)
+		So(err, ShouldBeNil)
+		_, err = terminal.Write(transcript.Bytes()[:beforeExit])
+		So(err, ShouldBeNil)
+		So(terminal.Snapshot().Text(), ShouldContainSubstring, "SCREEN COMPLETE / INPUT ENABLED")
+	})
 }
 
 type pacedReader struct {

@@ -8,6 +8,10 @@ The driver and Go library remain in the same module. The `driver` package owns
 the protocol and object registry; `cmd/tuicast-driver` is the composition root
 for SSH, Telnet, VT220, and xterm implementations.
 
+The machine-readable OpenRPC description is available at
+[`schema/openrpc.json`](../schema/openrpc.json). It uses named parameters, as
+does the driver's JSON-RPC interface.
+
 ## Running
 
 ```sh
