@@ -80,6 +80,25 @@ func TestDriverProtocol(t *testing.T) {
 		So(responseErr, ShouldBeNil)
 		So(result.(screenResult).Text, ShouldContainSubstring, "READY")
 
+		result, responseErr = server.waitForIdle(raw(map[string]any{
+			"sessionId":           sessionID,
+			"timeoutMilliseconds": 1000,
+			"quietMilliseconds":   10,
+		}))
+		So(responseErr, ShouldBeNil)
+		So(result.(screenResult).Text, ShouldContainSubstring, "READY")
+
+		missing := "MISSING"
+		_, responseErr = server.wait(raw(map[string]any{
+			"sessionId":           sessionID,
+			"matcher":             Matcher{Contains: &missing},
+			"timeoutMilliseconds": 10,
+		}))
+		So(responseErr.Code, ShouldEqual, -32000)
+		So(responseErr.Data.(waitErrorData).Kind, ShouldEqual, "timeout")
+		So(responseErr.Data.(waitErrorData).Expected, ShouldEqual, `screen containing "MISSING"`)
+		So(responseErr.Data.(waitErrorData).Screen.Text, ShouldContainSubstring, "READY")
+
 		result, responseErr = server.resize(raw(map[string]any{
 			"sessionId": sessionID,
 			"width":     30,

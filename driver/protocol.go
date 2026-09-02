@@ -3,9 +3,13 @@ package driver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+
+	"github.com/castingcode/tuicast"
 )
 
 const protocolVersion = "1"
@@ -33,6 +37,7 @@ type notification struct {
 type responseError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 func (e *responseError) Error() string {
@@ -44,7 +49,23 @@ func invalidParams(format string, arguments ...any) *responseError {
 }
 
 func applicationError(err error) *responseError {
-	return &responseError{Code: -32000, Message: err.Error()}
+	responseErr := &responseError{Code: -32000, Message: err.Error()}
+	var waitErr *tuicast.WaitError
+	if errors.As(err, &waitErr) {
+		kind := "waitFailed"
+		switch {
+		case errors.Is(waitErr, context.DeadlineExceeded):
+			kind = "timeout"
+		case errors.Is(waitErr, context.Canceled):
+			kind = "canceled"
+		}
+		responseErr.Data = waitErrorData{
+			Kind:     kind,
+			Expected: waitErr.Expected,
+			Screen:   makeScreenResult(waitErr.LastScreen),
+		}
+	}
+	return responseErr
 }
 
 func decodeParams(data json.RawMessage, destination any) *responseError {
@@ -126,4 +147,10 @@ type terminalEventResult struct {
 	Sequence uint64 `json:"sequence"`
 	Type     string `json:"type"`
 	Data     string `json:"data,omitempty"`
+}
+
+type waitErrorData struct {
+	Kind     string       `json:"kind"`
+	Expected string       `json:"expected"`
+	Screen   screenResult `json:"screen"`
 }

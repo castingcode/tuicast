@@ -42,6 +42,14 @@ worker can own an isolated process without port allocation or authentication.
 Language SDKs should be thin clients over the versioned protocol rather than
 reimplementing terminal state or session lifecycle.
 
+SDKs live under `sdk/` and are independently publishable language modules. The
+Go SDK has its own `go.mod` and does not import the root module, so consumers do
+not acquire the driver implementation, transport adapters, terminal emulators,
+or reference application as library dependencies. Timing-sensitive matching
+and idle detection stay in the driver; deterministic queries over a detached
+screen snapshot are implemented idiomatically by each SDK and checked against
+shared fixtures in `schema/testdata/`.
+
 ## Package Naming
 
 Do not name packages after architectural roles. Names such as `ports`,

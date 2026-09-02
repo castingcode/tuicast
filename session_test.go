@@ -104,6 +104,32 @@ func TestSessionAutomation(t *testing.T) {
 		So(server.Close(), ShouldBeNil)
 	})
 
+	Convey("WaitForIdle resets its quiet period for all host output", t, func() {
+		connector, err := memory.NewConnector(func(ctx context.Context, remote io.ReadWriteCloser) {
+			_, _ = remote.Write([]byte("READY"))
+			time.Sleep(30 * time.Millisecond)
+			_, _ = remote.Write([]byte{0})
+			time.Sleep(30 * time.Millisecond)
+			_, _ = remote.Write([]byte(" DONE"))
+			<-ctx.Done()
+		})
+		So(err, ShouldBeNil)
+		server := newTestServer()
+		connection, err := server.Connect(context.Background(), connector)
+		So(err, ShouldBeNil)
+		session, err := connection.NewSession(context.Background(), newTestTerminal(16, 2))
+		So(err, ShouldBeNil)
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		started := time.Now()
+		screen, err := session.WaitForIdle(ctx, 50*time.Millisecond)
+		So(err, ShouldBeNil)
+		So(screen.Line(0), ShouldStartWith, "READY DONE")
+		So(time.Since(started), ShouldBeGreaterThanOrEqualTo, 90*time.Millisecond)
+		So(server.Close(), ShouldBeNil)
+	})
+
 	Convey("Press sends the terminal profile's named-key sequence", t, func() {
 		input := make(chan string, 1)
 		connector, err := memory.NewConnector(func(ctx context.Context, remote io.ReadWriteCloser) {

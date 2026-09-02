@@ -266,6 +266,8 @@ func (s *Server) call(method string, params json.RawMessage, writer *rpcWriter) 
 		return s.screen(params)
 	case "session.wait":
 		return s.wait(params)
+	case "session.waitForIdle":
+		return s.waitForIdle(params)
 	case "session.subscribe":
 		return s.subscribe(params, writer)
 	case "session.subscribeEvents":
@@ -556,6 +558,42 @@ func (s *Server) wait(data json.RawMessage) (any, *responseError) {
 	} else {
 		screen, err = session.WaitFor(ctx, matcher)
 	}
+	if err != nil {
+		return nil, applicationError(err)
+	}
+	return makeScreenResult(screen), nil
+}
+
+func (s *Server) waitForIdle(data json.RawMessage) (any, *responseError) {
+	var params struct {
+		SessionID           uint64 `json:"sessionId"`
+		TimeoutMilliseconds int64  `json:"timeoutMilliseconds"`
+		QuietMilliseconds   int64  `json:"quietMilliseconds"`
+	}
+	if err := decodeParams(data, &params); err != nil {
+		return nil, err
+	}
+	if params.TimeoutMilliseconds <= 0 {
+		return nil, invalidParams("timeoutMilliseconds must be positive")
+	}
+	if params.QuietMilliseconds <= 0 {
+		return nil, invalidParams("quietMilliseconds must be positive")
+	}
+	session, responseErr := s.getSession(params.SessionID)
+	if responseErr != nil {
+		return nil, responseErr
+	}
+	timeout, err := milliseconds(params.TimeoutMilliseconds, false)
+	if err != nil {
+		return nil, invalidParams("invalid timeoutMilliseconds: %v", err)
+	}
+	quiet, err := milliseconds(params.QuietMilliseconds, false)
+	if err != nil {
+		return nil, invalidParams("invalid quietMilliseconds: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(s.context, timeout)
+	defer cancel()
+	screen, err := session.WaitForIdle(ctx, quiet)
 	if err != nil {
 		return nil, applicationError(err)
 	}

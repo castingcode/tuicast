@@ -260,6 +260,19 @@ func (s *Session) WaitForStable(ctx context.Context, matcher ScreenMatcher, quie
 	}
 }
 
+// WaitForIdle waits until no host output arrives for quietPeriod. Host bytes
+// that do not visibly change the screen still reset the quiet period.
+func (s *Session) WaitForIdle(ctx context.Context, quietPeriod time.Duration) (Screen, error) {
+	if quietPeriod <= 0 {
+		return Screen{}, fmt.Errorf("waiting for idle terminal: quiet period must be positive")
+	}
+	matcher := describedScreenMatcher{
+		description: fmt.Sprintf("terminal idle for %s", quietPeriod),
+		match:       func(Screen) bool { return true },
+	}
+	return s.WaitForStable(ctx, matcher, quietPeriod)
+}
+
 // Screens observes detached snapshots. It sends the current snapshot first,
 // then the latest snapshot after each visible screen revision. A slow observer
 // may skip intermediate revisions. The channel closes when ctx or the session

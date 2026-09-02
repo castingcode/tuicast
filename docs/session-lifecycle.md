@@ -71,6 +71,11 @@ SSH and Telnet do not expose an application-ready signal, so callers should use
 the strongest application-specific matcher available and choose a suitable
 quiet period.
 
+`Session.WaitForIdle` applies the same host-output quiet-period behavior without
+requiring a screen matcher. It is useful when an application has no stable text
+that identifies completion, but it should not replace a stronger semantic
+matcher when one is available.
+
 Canceled and failed waits return a `WaitError`. It retains the matcher
 description and last detached snapshot, allowing assertion libraries to report
 the actual screen without TUICast depending on a test framework.

@@ -1,0 +1,52 @@
+{
+  "cases": [
+    {
+      "name": "wide characters use terminal columns",
+      "screen": {
+        "width": 8,
+        "height": 1,
+        "revision": 1,
+        "text": "A界READY",
+        "cursor": {"column": 0, "row": 0, "visible": true},
+        "cells": [
+          {"text": "A", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": "界", "width": 2, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": "", "width": 0, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": "R", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": "E", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": "A", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": "D", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": "Y", "width": 1, "foreground": -1, "background": -1, "attributes": 0}
+        ]
+      },
+      "contains": "界READY",
+      "find": "READY",
+      "position": {"column": 3, "row": 0}
+    },
+    {
+      "name": "search returns the first row-major match",
+      "screen": {
+        "width": 5,
+        "height": 2,
+        "revision": 2,
+        "text": "  OK \nOK   ",
+        "cursor": {"column": 2, "row": 1, "visible": true},
+        "cells": [
+          {"text": " ", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": " ", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": "O", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": "K", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": " ", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": "O", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": "K", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": " ", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": " ", "width": 1, "foreground": -1, "background": -1, "attributes": 0},
+          {"text": " ", "width": 1, "foreground": -1, "background": -1, "attributes": 0}
+        ]
+      },
+      "contains": "OK",
+      "find": "OK",
+      "position": {"column": 2, "row": 0}
+    }
+  ]
+}

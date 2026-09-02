@@ -47,9 +47,10 @@ sessions, and connections.
 | `session.resize` | Resize the remote and emulated terminals. |
 | `session.screen` | Return the current detached screen snapshot. |
 | `session.wait` | Wait for a serializable matcher, optionally until stable. |
+| `session.waitForIdle` | Wait until host output has been quiet for a period. |
 | `session.subscribe` | Subscribe to coalesced screen revisions. |
 | `session.subscribeEvents` | Subscribe to BELL and ENQ terminal events. |
-| `session.unsubscribe` | Cancel a screen subscription. |
+| `session.unsubscribe` | Cancel a screen or event subscription. |
 
 ### Connections
 
@@ -131,6 +132,11 @@ each level:
 Available expressions are `contains`, `line` (`row` and exact `text`),
 `cursor`, `all`, `any`, and `not`.
 
+`session.waitForIdle` requires positive `timeoutMilliseconds` and
+`quietMilliseconds` values. Its quiet period resets for every host byte,
+including terminal controls that do not visibly change the screen. It returns
+the screen captured at the end of the quiet period.
+
 ### Screens and subscriptions
 
 Screen results contain `width`, `height`, `revision`, `text`, `cursor`, and the
@@ -173,4 +179,6 @@ The driver uses standard JSON-RPC error codes for malformed requests:
 - `-32000`: transport, terminal, wait, or lifecycle failure
 
 Application error messages retain TUICast's operation context and wait
-diagnostics, including the last screen where applicable.
+diagnostics. Wait failures also include structured JSON-RPC error `data` with
+`kind`, `expected`, and the last `screen`, allowing clients to report useful
+diagnostics without parsing the human-readable message.

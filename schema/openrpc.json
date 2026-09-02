@@ -181,6 +181,22 @@
       "errors": [{ "$ref": "#/components/errors/ApplicationError" }]
     },
     {
+      "name": "session.waitForIdle",
+      "summary": "Wait for a host-output quiet period",
+      "description": "Waits until no host bytes arrive for quietMilliseconds. Bytes that do not visibly change the screen still reset the quiet period.",
+      "paramStructure": "by-name",
+      "params": [
+        { "$ref": "#/components/contentDescriptors/sessionId" },
+        { "$ref": "#/components/contentDescriptors/timeoutMilliseconds" },
+        { "$ref": "#/components/contentDescriptors/quietMilliseconds" }
+      ],
+      "result": {
+        "name": "screen",
+        "schema": { "$ref": "#/components/schemas/Screen" }
+      },
+      "errors": [{ "$ref": "#/components/errors/ApplicationError" }]
+    },
+    {
       "name": "session.subscribe",
       "summary": "Subscribe to coalesced screen revisions",
       "description": "After returning the subscription ID, the driver emits session.screen notifications beginning with the current snapshot.",
@@ -343,6 +359,12 @@
       "stableMilliseconds": {
         "name": "stableMilliseconds",
         "schema": { "type": "integer", "minimum": 0, "format": "int64", "default": 0 }
+      },
+      "quietMilliseconds": {
+        "name": "quietMilliseconds",
+        "description": "Required host-output quiet period.",
+        "required": true,
+        "schema": { "type": "integer", "minimum": 1, "format": "int64" }
       }
     },
     "schemas": {
