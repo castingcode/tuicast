@@ -18,12 +18,33 @@ The command uses the current terminal dimensions. Bubble Tea owns raw mode,
 input decoding, resize events, alternate-screen rendering, and terminal cleanup.
 Use `Ctrl-C` inside the application to exit.
 
+To serve an isolated application per remote session, select either SSH or
+Telnet. The listen address (including `:0` for an ephemeral port) is written to
+standard error. SSH generates an in-memory Ed25519 host key unless a stable PEM
+key is supplied.
+
+```sh
+go run ./cmd/reference-tui --ssh-address 127.0.0.1:2222
+go run ./cmd/reference-tui --telnet-address 127.0.0.1:2323
+go run ./cmd/reference-tui \
+  --ssh-address 127.0.0.1:2222 \
+  --ssh-username operator \
+  --ssh-password casting \
+  --ssh-host-key ./host-key
+```
+
+SSH PTY window changes and Telnet NAWS updates are forwarded to Bubble Tea.
+The SSH and Telnet address flags are mutually exclusive.
+
 The deterministic test credentials are:
 
 ```text
 User ID:  operator
 Password: casting
 ```
+
+These are also the default SSH transport credentials. They are intentionally
+for local demonstrations and tests, not production deployment.
 
 The login page accepts Tab, Shift-Tab, or arrow keys to change fields, Enter or
 F1 to log in, and F2 to clear the form. The authenticated menu supports Up/Down,

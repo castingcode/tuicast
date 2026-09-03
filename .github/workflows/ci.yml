@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  workflow_call:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Format, vet, and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            sdk/go/go.sum
+            examples/go/go.sum
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l $(git ls-files '*.go'))"
+          if [[ -n "$unformatted" ]]; then
+            echo "The following files are not formatted with gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+          git diff --check
+
+      - name: Verify module files
+        shell: bash
+        run: |
+          go mod tidy
+          go mod verify
+          (
+            cd sdk/go
+            GOWORK=off go mod tidy
+            GOWORK=off go mod verify
+          )
+          (
+            cd examples/go
+            GOWORK=off go mod tidy
+            GOWORK=off go mod verify
+          )
+          git diff --exit-code -- go.mod go.sum sdk/go/go.mod sdk/go/go.sum examples/go/go.mod examples/go/go.sum
+
+      - name: Vet root module
+        run: go vet ./...
+
+      - name: Vet Go SDK module
+        working-directory: sdk/go
+        env:
+          GOWORK: "off"
+        run: go vet ./...
+
+      - name: Vet Go examples module
+        working-directory: examples/go
+        env:
+          GOWORK: "off"
+        run: go vet ./...
+
+      - name: Test root module with race detection and coverage
+        run: go test -race -covermode=atomic -coverprofile=coverage-root.out ./...
+
+      - name: Test Go SDK module with race detection and coverage
+        working-directory: sdk/go
+        env:
+          GOWORK: "off"
+        run: go test -race -covermode=atomic -coverprofile=coverage-sdk.out ./...
+
+      - name: Test Go SDK reference example
+        shell: bash
+        run: |
+          mkdir -p .bin
+          go build -o .bin/reference-tui ./cmd/reference-tui
+          go build -o .bin/tuicast-driver ./cmd/tuicast-driver
+          .bin/reference-tui --ssh-address 127.0.0.1:2222 >reference-tui.log 2>&1 &
+          reference_pid=$!
+          trap 'kill "$reference_pid"' EXIT
+          for _ in {1..50}; do
+            if grep -q 'SSH server listening' reference-tui.log; then
+              break
+            fi
+            if ! kill -0 "$reference_pid" 2>/dev/null; then
+              cat reference-tui.log
+              exit 1
+            fi
+            sleep 0.1
+          done
+          grep -q 'SSH server listening' reference-tui.log
+          (
+            cd examples/go
+            GOWORK=off TUICAST_DRIVER="$GITHUB_WORKSPACE/.bin/tuicast-driver" \
+              go test -race ./...
+          )
+
+      - name: Generate coverage reports
+        shell: bash
+        run: |
+          go tool cover -func=coverage-root.out | tee coverage-root.txt
+          go tool cover -html=coverage-root.out -o coverage-root.html
+          (
+            cd sdk/go
+            go tool cover -func=coverage-sdk.out | tee coverage-sdk.txt
+            go tool cover -html=coverage-sdk.out -o coverage-sdk.html
+          )
+          {
+            echo '### Coverage'
+            echo
+            echo "- Root module: $(tail -n 1 coverage-root.txt | awk '{print $NF}')"
+            echo "- Go SDK: $(tail -n 1 sdk/go/coverage-sdk.txt | awk '{print $NF}')"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          if-no-files-found: error
+          path: |
+            coverage-root.out
+            coverage-root.txt
+            coverage-root.html
+            sdk/go/coverage-sdk.out
+            sdk/go/coverage-sdk.txt
+            sdk/go/coverage-sdk.html

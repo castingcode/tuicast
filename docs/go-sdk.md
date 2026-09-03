@@ -171,3 +171,7 @@ exit before the configured timeout.
   and should inspect exactly the snapshot held by the caller.
 - The SDK has a separate `go.mod` and no `go.work`; test it independently with
   `GOWORK=off go test ./...` from `sdk/go`.
+
+For a complete GoConvey workflow against the SSH reference application, see
+[`examples/go/reference`](../examples/go/reference) and its
+[`examples/reference` fixture](../examples/reference/README.md).

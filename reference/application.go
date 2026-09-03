@@ -84,6 +84,12 @@ type Application struct {
 	runErr      error
 }
 
+// Size is a terminal window size supplied by a network session.
+type Size struct {
+	Width  int
+	Height int
+}
+
 // New creates a reference application with the requested terminal dimensions.
 func New(width, height int) (*Application, error) {
 	if width <= 0 || height <= 0 {
@@ -133,6 +139,12 @@ func (a *Application) SetVTTestRunner(runner VTTestRunner) {
 
 // Run serves one application session until the user exits or input ends.
 func (a *Application) Run(input io.Reader, output io.Writer) error {
+	return a.RunWithResizes(input, output, nil)
+}
+
+// RunWithResizes serves one application session and applies terminal size
+// changes received from a remote protocol.
+func (a *Application) RunWithResizes(input io.Reader, output io.Writer, resizes <-chan Size) error {
 	if input == nil {
 		return fmt.Errorf("running reference TUI: input is required")
 	}
@@ -146,6 +158,23 @@ func (a *Application) Run(input io.Reader, output io.Writer) error {
 		tea.WithOutput(output),
 		tea.WithWindowSize(a.width, a.height),
 	)
+	done := make(chan struct{})
+	if resizes != nil {
+		go func() {
+			for {
+				select {
+				case size, ok := <-resizes:
+					if !ok {
+						return
+					}
+					program.Send(tea.WindowSizeMsg{Width: size.Width, Height: size.Height})
+				case <-done:
+					return
+				}
+			}
+		}()
+	}
+	defer close(done)
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("running reference TUI program: %w", err)
 	}

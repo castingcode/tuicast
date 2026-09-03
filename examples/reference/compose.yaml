@@ -1,0 +1,8 @@
+services:
+  reference-tui:
+    build:
+      context: ../..
+      dockerfile: docker/reference-tui.Dockerfile
+    command: ["--ssh-address", "0.0.0.0:2222"]
+    ports:
+      - "${TUICAST_REFERENCE_PORT:-2222}:2222"
