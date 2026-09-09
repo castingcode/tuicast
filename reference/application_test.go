@@ -93,6 +93,7 @@ func TestApplication(t *testing.T) {
 			{8, pageLongRunning, "LONG-RUNNING OPERATION"},
 			{9, pageResize, "TERMINAL RESIZE"},
 			{10, pageUnicode, "UNICODE ALIGNMENT"},
+			{11, pageBellENQ, "BELL / ENQ ANSWERBACK"},
 		}
 		for _, testCase := range cases {
 			application := authenticatedApplication()
@@ -103,6 +104,37 @@ func TestApplication(t *testing.T) {
 			So(application.page, ShouldEqual, testCase.page)
 			So(application.View().Content, ShouldContainSubstring, testCase.text)
 		}
+	})
+
+	Convey("BELL and ENQ emit once and capture answerback in event order", t, func() {
+		application := authenticatedApplication()
+		application.selected = 11
+		application.Update(key(tea.KeyEnter))
+
+		_, bell := application.Update(runes("b"))
+		_, duplicateBell := application.Update(runes("b"))
+		_, enq := application.Update(runes("e"))
+		repeatedENQKey := runes("e")
+		repeatedENQKey.IsRepeat = true
+		_, duplicateENQ := application.Update(repeatedENQKey)
+		application.Update(runes("TUICAST-ANSWER"))
+
+		So(bell, ShouldNotBeNil)
+		So(bell().(tea.RawMsg).Msg, ShouldEqual, bellByte)
+		So(enq, ShouldNotBeNil)
+		So(enq().(tea.RawMsg).Msg, ShouldEqual, enqByte)
+		So(duplicateBell, ShouldBeNil)
+		So(duplicateENQ, ShouldBeNil)
+		So(application.bellENQ.bellCount, ShouldEqual, 1)
+		So(application.bellENQ.enqCount, ShouldEqual, 1)
+		So(application.bellENQ.answerback, ShouldEqual, "TUICAST-ANSWER")
+		So(application.View().Content, ShouldContainSubstring, "BEL emitted: 1 / 1")
+		So(application.View().Content, ShouldContainSubstring, `Answerback: "TUICAST-ANSWER"`)
+		So(application.bellENQ.events, ShouldResemble, []string{
+			"1. BEL emitted",
+			"2. ENQ emitted",
+			`3. Answerback received: "TUICAST-ANSWER"`,
+		})
 	})
 
 	Convey("The form validates required values and accepts a complete receipt", t, func() {

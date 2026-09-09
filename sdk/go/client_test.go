@@ -65,6 +65,22 @@ func TestDriverHelperProcess(t *testing.T) {
 			response["result"] = map[string]any{"sent": true}
 		case "session.resize":
 			response["result"] = map[string]any{"resized": true}
+		case "session.subscribe", "session.subscribeEvents":
+			response["result"] = map[string]any{"subscriptionId": 33}
+			_ = write(response)
+			if request.Method == "session.subscribe" {
+				for revision := 1; revision <= 3; revision++ {
+					screen := helperScreen()
+					screen["revision"] = revision
+					_ = write(map[string]any{"jsonrpc": "2.0", "method": "session.screen", "params": map[string]any{"subscriptionId": 33, "sessionId": 22, "screen": screen}})
+				}
+			} else {
+				_ = write(map[string]any{"jsonrpc": "2.0", "method": "session.event", "params": map[string]any{"subscriptionId": 33, "sessionId": 22, "event": map[string]any{"sequence": 6, "type": "bell"}}})
+				_ = write(map[string]any{"jsonrpc": "2.0", "method": "session.event", "params": map[string]any{"subscriptionId": 33, "sessionId": 22, "event": map[string]any{"sequence": 7, "type": "enquiry", "data": "TUICAST"}}})
+			}
+			continue
+		case "session.unsubscribe":
+			response["result"] = map[string]any{"unsubscribed": true}
 		case "session.screen":
 			response["result"] = helperScreen()
 			go func(id uint64, outgoing map[string]any) {
@@ -123,6 +139,23 @@ func TestClientLifecycle(t *testing.T) {
 		So(session.Send(context.Background(), []byte{0, 1}), ShouldBeNil)
 		So(session.Press(context.Background(), Enter), ShouldBeNil)
 		So(session.Resize(context.Background(), 132, 24), ShouldBeNil)
+
+		screens, err := session.Subscribe(context.Background())
+		So(err, ShouldBeNil)
+		time.Sleep(10 * time.Millisecond)
+		subscribedScreen := <-screens.Screens
+		So(subscribedScreen.Text(), ShouldEqual, "READY")
+		So(subscribedScreen.Revision, ShouldEqual, uint64(3))
+		So(screens.Close(context.Background()), ShouldBeNil)
+		_, open := <-screens.Screens
+		So(open, ShouldBeFalse)
+		So(screens.Close(context.Background()), ShouldBeNil)
+
+		events, err := session.SubscribeEvents(context.Background())
+		So(err, ShouldBeNil)
+		So(<-events.Events, ShouldResemble, TerminalEvent{Sequence: 6, Type: EventBell})
+		So(<-events.Events, ShouldResemble, TerminalEvent{Sequence: 7, Type: EventEnquiry, Data: "TUICAST"})
+		So(events.Close(context.Background()), ShouldBeNil)
 
 		screen, err := session.Screen(context.Background())
 		So(err, ShouldBeNil)

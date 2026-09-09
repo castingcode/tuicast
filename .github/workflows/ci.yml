@@ -84,20 +84,23 @@ jobs:
           mkdir -p .bin
           go build -o .bin/reference-tui ./cmd/reference-tui
           go build -o .bin/tuicast-driver ./cmd/tuicast-driver
-          .bin/reference-tui --ssh-address 127.0.0.1:2222 >reference-tui.log 2>&1 &
-          reference_pid=$!
-          trap 'kill "$reference_pid"' EXIT
+          .bin/reference-tui --ssh-address 127.0.0.1:2222 >reference-ssh.log 2>&1 &
+          ssh_pid=$!
+          .bin/reference-tui --telnet-address 127.0.0.1:2323 >reference-telnet.log 2>&1 &
+          telnet_pid=$!
+          trap 'kill "$ssh_pid" "$telnet_pid"' EXIT
           for _ in {1..50}; do
-            if grep -q 'SSH server listening' reference-tui.log; then
+            if grep -q 'SSH server listening' reference-ssh.log && grep -q 'Telnet server listening' reference-telnet.log; then
               break
             fi
-            if ! kill -0 "$reference_pid" 2>/dev/null; then
-              cat reference-tui.log
+            if ! kill -0 "$ssh_pid" 2>/dev/null || ! kill -0 "$telnet_pid" 2>/dev/null; then
+              cat reference-ssh.log reference-telnet.log
               exit 1
             fi
             sleep 0.1
           done
-          grep -q 'SSH server listening' reference-tui.log
+          grep -q 'SSH server listening' reference-ssh.log
+          grep -q 'Telnet server listening' reference-telnet.log
           (
             cd examples/go
             GOWORK=off TUICAST_DRIVER="$GITHUB_WORKSPACE/.bin/tuicast-driver" \

@@ -3,6 +3,7 @@ package tuicast
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -117,6 +118,168 @@ type Session struct {
 	closeMu sync.Mutex
 	closed  bool
 }
+
+// TerminalEventType identifies a terminal event.
+type TerminalEventType string
+
+const (
+	EventBell    TerminalEventType = "bell"
+	EventEnquiry TerminalEventType = "enquiry"
+)
+
+// TerminalEvent is a BELL or ENQ event. Data is the configured answerback for ENQ.
+type TerminalEvent struct {
+	Sequence uint64            `json:"sequence"`
+	Type     TerminalEventType `json:"type"`
+	Data     string            `json:"data,omitempty"`
+}
+
+// ScreenSubscription delivers detached snapshots on Screens. Delivery is
+// coalesced: when the consumer is slow, an unread snapshot is replaced by the
+// newest one. Screens is closed by Close or when the driver stops.
+type ScreenSubscription struct {
+	base    subscriptionBase
+	Screens <-chan Screen
+}
+
+// EventSubscription delivers terminal events in order on Events. To avoid
+// blocking the JSON-RPC reader, Events is closed if its buffer fills. It is also
+// closed by Close or when the driver stops.
+type EventSubscription struct {
+	base   subscriptionBase
+	Events <-chan TerminalEvent
+}
+
+type subscriptionBase struct {
+	client        *Driver
+	id            uint64
+	mu            sync.Mutex
+	channelClosed bool
+	unsubscribed  bool
+	deliverFunc   func(json.RawMessage) bool
+	closeFunc     func()
+}
+
+func (s *subscriptionBase) deliver(params json.RawMessage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.channelClosed && !s.deliverFunc(params) {
+		s.channelClosed = true
+		s.closeFunc()
+	}
+}
+
+func (s *subscriptionBase) finish() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.unsubscribed = true
+	if !s.channelClosed {
+		s.channelClosed = true
+		s.closeFunc()
+	}
+}
+
+func (s *subscriptionBase) close(ctx context.Context) error {
+	s.mu.Lock()
+	if s.unsubscribed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.unsubscribed = true
+	if !s.channelClosed {
+		s.channelClosed = true
+		s.closeFunc()
+	}
+	s.mu.Unlock()
+	s.client.mu.Lock()
+	delete(s.client.subscriptions, s.id)
+	s.client.mu.Unlock()
+	operationContext, cancel := s.client.operationContext(ctx, s.client.defaultTimeout)
+	defer cancel()
+	if err := s.client.call(operationContext, "session.unsubscribe", map[string]any{"subscriptionId": s.id}, nil); err != nil {
+		return fmt.Errorf("unsubscribing session subscription %d: %w", s.id, err)
+	}
+	return nil
+}
+
+// Subscribe subscribes to coalesced screen snapshots, beginning with the current screen.
+func (s *Session) Subscribe(ctx context.Context) (*ScreenSubscription, error) {
+	channel := make(chan Screen, 1)
+	result := &ScreenSubscription{Screens: channel}
+	result.base = subscriptionBase{client: s.connection.client, closeFunc: func() { close(channel) }}
+	result.base.deliverFunc = func(data json.RawMessage) bool {
+		var params struct {
+			Screen Screen `json:"screen"`
+		}
+		if json.Unmarshal(data, &params) != nil {
+			return true
+		}
+		select {
+		case <-channel:
+		default:
+		}
+		channel <- params.Screen
+		return true
+	}
+	if err := s.addSubscription(ctx, "session.subscribe", &result.base); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// SubscribeEvents subscribes to BELL and ENQ events. Events are buffered in
+// order. If the consumer cannot keep up, Events is closed rather than blocking
+// unrelated driver responses; callers should continue reading it promptly.
+func (s *Session) SubscribeEvents(ctx context.Context) (*EventSubscription, error) {
+	channel := make(chan TerminalEvent, 64)
+	result := &EventSubscription{Events: channel}
+	result.base = subscriptionBase{client: s.connection.client, closeFunc: func() { close(channel) }}
+	result.base.deliverFunc = func(data json.RawMessage) bool {
+		var params struct {
+			Event TerminalEvent `json:"event"`
+		}
+		if json.Unmarshal(data, &params) != nil {
+			return true
+		}
+		select {
+		case channel <- params.Event:
+			return true
+		default:
+			return false
+		}
+	}
+	if err := s.addSubscription(ctx, "session.subscribeEvents", &result.base); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (s *Session) addSubscription(ctx context.Context, method string, subscription *subscriptionBase) error {
+	operationContext, cancel := s.connection.client.operationContext(ctx, s.connection.client.defaultTimeout)
+	defer cancel()
+	var result struct {
+		SubscriptionID uint64 `json:"subscriptionId"`
+	}
+	if err := s.connection.client.call(operationContext, method, map[string]any{"sessionId": s.id}, &result); err != nil {
+		return fmt.Errorf("subscribing to session: %w", err)
+	}
+	subscription.id = result.SubscriptionID
+	s.connection.client.mu.Lock()
+	s.connection.client.subscriptions[result.SubscriptionID] = subscription
+	queued := s.connection.client.queuedNotifications[result.SubscriptionID]
+	delete(s.connection.client.queuedNotifications, result.SubscriptionID)
+	s.connection.client.mu.Unlock()
+	for _, notification := range queued {
+		subscription.deliver(notification)
+	}
+	return nil
+}
+
+// Close unsubscribes and closes Screens. It is idempotent.
+func (s *ScreenSubscription) Close(ctx context.Context) error { return s.base.close(ctx) }
+
+// Close unsubscribes and closes Events. It is idempotent.
+func (s *EventSubscription) Close(ctx context.Context) error { return s.base.close(ctx) }
 
 // ID returns the driver's session identifier.
 func (s *Session) ID() uint64 { return s.id }

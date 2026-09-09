@@ -1,8 +1,15 @@
 services:
-  reference-tui:
+  reference-tui-ssh:
     build:
       context: ../..
       dockerfile: docker/reference-tui.Dockerfile
     command: ["--ssh-address", "0.0.0.0:2222"]
     ports:
       - "${TUICAST_REFERENCE_PORT:-2222}:2222"
+  reference-tui-telnet:
+    build:
+      context: ../..
+      dockerfile: docker/reference-tui.Dockerfile
+    command: ["--telnet-address", "0.0.0.0:2323"]
+    ports:
+      - "${TUICAST_REFERENCE_TELNET_PORT:-2323}:2323"

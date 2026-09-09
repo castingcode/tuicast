@@ -168,6 +168,13 @@ events include the configured answerback in `data`. Event sequence numbers are
 monotonic within a session. The driver sends the answerback to the host before
 publishing the enquiry event.
 
+The Go SDK exposes these methods through `Session.Subscribe` and
+`Session.SubscribeEvents`. Screen subscriptions coalesce unread revisions.
+Event subscriptions preserve order in a bounded buffer and close their event
+channel if the consumer cannot keep up, preventing notifications from blocking
+unrelated JSON-RPC responses. Both subscription types have an idempotent
+`Close` method that calls `session.unsubscribe`.
+
 ## Errors
 
 The driver uses standard JSON-RPC error codes for malformed requests:

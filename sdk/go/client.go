@@ -91,13 +91,15 @@ type Driver struct {
 	defaultTimeout time.Duration
 	processDone    <-chan error
 
-	writeMu  sync.Mutex
-	mu       sync.Mutex
-	nextID   uint64
-	pending  map[uint64]chan rpcReply
-	failure  error
-	done     chan struct{}
-	doneOnce sync.Once
+	writeMu             sync.Mutex
+	mu                  sync.Mutex
+	nextID              uint64
+	pending             map[uint64]chan rpcReply
+	subscriptions       map[uint64]notificationSubscription
+	queuedNotifications map[uint64][]json.RawMessage
+	failure             error
+	done                chan struct{}
+	doneOnce            sync.Once
 
 	closeOnce sync.Once
 	closeDone chan struct{}
@@ -115,8 +117,14 @@ type rpcResponse struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      uint64          `json:"id"`
 	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params"`
 	Result  json.RawMessage `json:"result"`
 	Error   *RPCError       `json:"error"`
+}
+
+type notificationSubscription interface {
+	deliver(json.RawMessage)
+	finish()
 }
 
 type rpcReply struct {
@@ -175,14 +183,16 @@ func Launch(ctx context.Context, options ...LaunchOption) (*Driver, error) {
 		processDone <- command.Wait()
 	}()
 	client := &Driver{
-		command:        command,
-		input:          input,
-		encoder:        json.NewEncoder(input),
-		defaultTimeout: config.timeout,
-		processDone:    processDone,
-		pending:        make(map[uint64]chan rpcReply),
-		done:           make(chan struct{}),
-		closeDone:      make(chan struct{}),
+		command:             command,
+		input:               input,
+		encoder:             json.NewEncoder(input),
+		defaultTimeout:      config.timeout,
+		processDone:         processDone,
+		pending:             make(map[uint64]chan rpcReply),
+		subscriptions:       make(map[uint64]notificationSubscription),
+		queuedNotifications: make(map[uint64][]json.RawMessage),
+		done:                make(chan struct{}),
+		closeDone:           make(chan struct{}),
 	}
 	go client.read(json.NewDecoder(output))
 
@@ -215,6 +225,7 @@ func (c *Driver) read(decoder *json.Decoder) {
 		}
 		if response.ID == 0 {
 			if response.Method != "" {
+				c.routeNotification(response.Method, response.Params)
 				continue
 			}
 			c.fail(fmt.Errorf("reading driver response: response identifier is required"))
@@ -227,6 +238,34 @@ func (c *Driver) read(decoder *json.Decoder) {
 		if result != nil {
 			result <- rpcReply{response: response}
 		}
+	}
+}
+
+func (c *Driver) routeNotification(method string, params json.RawMessage) {
+	if method != "session.screen" && method != "session.event" {
+		return
+	}
+	var envelope struct {
+		SubscriptionID uint64 `json:"subscriptionId"`
+	}
+	if json.Unmarshal(params, &envelope) != nil {
+		return
+	}
+	c.mu.Lock()
+	subscription := c.subscriptions[envelope.SubscriptionID]
+	if subscription == nil {
+		// A driver may emit the first notification immediately after the
+		// subscribe response, before the calling goroutine registers it.
+		queued := append(json.RawMessage(nil), params...)
+		if method == "session.screen" {
+			c.queuedNotifications[envelope.SubscriptionID] = []json.RawMessage{queued}
+		} else if len(c.queuedNotifications[envelope.SubscriptionID]) < 64 {
+			c.queuedNotifications[envelope.SubscriptionID] = append(c.queuedNotifications[envelope.SubscriptionID], queued)
+		}
+	}
+	c.mu.Unlock()
+	if subscription != nil {
+		subscription.deliver(params)
 	}
 }
 
@@ -283,9 +322,15 @@ func (c *Driver) fail(err error) {
 	}
 	pending := c.pending
 	c.pending = make(map[uint64]chan rpcReply)
+	subscriptions := c.subscriptions
+	c.subscriptions = make(map[uint64]notificationSubscription)
+	c.queuedNotifications = make(map[uint64][]json.RawMessage)
 	c.mu.Unlock()
 	for _, result := range pending {
 		result <- rpcReply{err: err}
+	}
+	for _, subscription := range subscriptions {
+		subscription.finish()
 	}
 	c.doneOnce.Do(func() { close(c.done) })
 }

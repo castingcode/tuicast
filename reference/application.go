@@ -11,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 )
 
 const (
@@ -33,6 +34,7 @@ const (
 	pageLongRunning
 	pageResize
 	pageUnicode
+	pageBellENQ
 )
 
 var menuItems = []string{
@@ -47,6 +49,7 @@ var menuItems = []string{
 	"Long Running Operation",
 	"Terminal Resize",
 	"Unicode",
+	"BELL / ENQ Answerback",
 	"ANSI / VT220 Tests",
 }
 
@@ -80,6 +83,7 @@ type Application struct {
 	longRunning longRunningModel
 	resizeDemo  resizeModel
 	unicode     unicodeModel
+	bellENQ     bellENQModel
 	vtTest      VTTestRunner
 	runErr      error
 }
@@ -124,6 +128,7 @@ func New(width, height int) (*Application, error) {
 		longRunning: newLongRunningModel(width, height),
 		resizeDemo:  newResizeModel(width, height),
 		unicode:     newUnicodeModel(width, height),
+		bellENQ:     newBellENQModel(width, height),
 		vtTest:      CommandVTTestRunner{},
 	}, nil
 }
@@ -156,6 +161,7 @@ func (a *Application) RunWithResizes(input io.Reader, output io.Writer, resizes 
 		a,
 		tea.WithInput(input),
 		tea.WithOutput(output),
+		tea.WithColorProfile(colorprofile.ANSI256),
 		tea.WithWindowSize(a.width, a.height),
 	)
 	done := make(chan struct{})
@@ -283,6 +289,12 @@ func (a *Application) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				a.completeScenario("Unicode")
 			}
 			return a, nil
+		case pageBellENQ:
+			back, command := a.bellENQ.update(message)
+			if back {
+				a.completeScenario("BELL / ENQ Answerback")
+			}
+			return a, command
 		}
 	}
 	return a, nil
@@ -339,6 +351,8 @@ func (a *Application) View() tea.View {
 		body = a.resizeDemo.view()
 	case pageUnicode:
 		body = a.unicode.view()
+	case pageBellENQ:
+		body = a.bellENQ.view()
 	}
 	view := tea.NewView(lipgloss.NewStyle().MaxWidth(a.width).Render(
 		titleStyle.Render("TUICAST REFERENCE TERMINAL") + "\n\n" + body,
@@ -420,6 +434,9 @@ func (a *Application) updateMenu(key tea.KeyPressMsg) tea.Cmd {
 		case 10:
 			a.unicode = newUnicodeModel(a.width, a.height)
 			a.page = pageUnicode
+		case 11:
+			a.bellENQ = newBellENQModel(a.width, a.height)
+			a.page = pageBellENQ
 		case len(menuItems) - 1:
 			a.message = "Launching VTTEST"
 			return tea.Exec(&vtTestExecCommand{runner: a.vtTest}, func(err error) tea.Msg {
@@ -506,6 +523,7 @@ func (a *Application) resize(width, height int) {
 	a.longRunning.resize(width, height)
 	a.resizeDemo.resize(width, height)
 	a.unicode.resize(width, height)
+	a.bellENQ.resize(width, height)
 }
 
 func (a *Application) viewLogin() string {
