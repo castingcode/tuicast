@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://castingcode.github.io/tuicast/schema/mcp-profiles.schema.json",
+  "title": "TUICast MCP profiles",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profiles"],
+  "properties": {
+    "profiles": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "minLength": 1,
+        "pattern": "^\\S(?:.*\\S)?$"
+      },
+      "additionalProperties": { "$ref": "#/$defs/profile" }
+    }
+  },
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "address", "terminal", "width", "height"],
+      "properties": {
+        "description": { "type": "string" },
+        "protocol": { "enum": ["ssh", "telnet"] },
+        "address": { "type": "string", "minLength": 1 },
+        "terminal": { "enum": ["vt220", "xterm-256color"] },
+        "width": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "ssh": { "$ref": "#/$defs/ssh" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "protocol": { "const": "ssh" } } },
+          "then": { "required": ["ssh"] },
+          "else": { "not": { "required": ["ssh"] } }
+        }
+      ]
+    },
+    "ssh": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["username"],
+      "properties": {
+        "username": { "type": "string", "minLength": 1 },
+        "passwordEnv": { "type": "string", "minLength": 1 },
+        "privateKeyFile": { "type": "string", "minLength": 1 },
+        "privateKeyPassphraseEnv": { "type": "string", "minLength": 1 },
+        "knownHostsFile": { "type": "string", "minLength": 1 },
+        "hostKeyFingerprint": { "type": "string", "minLength": 1 },
+        "insecureSkipHostKeyCheck": { "const": true },
+        "connectTimeoutMilliseconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 600000
+        }
+      },
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["passwordEnv"] },
+            { "required": ["privateKeyFile"] }
+          ]
+        },
+        {
+          "oneOf": [
+            { "required": ["knownHostsFile"] },
+            { "required": ["hostKeyFingerprint"] },
+            { "required": ["insecureSkipHostKeyCheck"] }
+          ]
+        },
+        {
+          "if": { "required": ["privateKeyPassphraseEnv"] },
+          "then": { "required": ["privateKeyFile"] }
+        }
+      ]
+    }
+  }
+}

@@ -42,6 +42,13 @@ worker can own an isolated process without port allocation or authentication.
 Language SDKs should be thin clients over the versioned protocol rather than
 reimplementing terminal state or session lifecycle.
 
+The `mcpserver` package exposes a separate, bounded MCP tool surface for AI
+clients. `cmd/tuicast-mcp` is its composition root and owns its terminal
+connections directly; it does not multiplex MCP over the driver's single-client
+standard streams. Operators configure named profiles that resolve concrete
+transports and credentials before the server starts. MCP clients may select a
+profile name but cannot provide an arbitrary network address or read credentials.
+
 SDKs live under `sdk/` and are independently publishable language modules. The
 Go SDK has its own `go.mod` and does not import the root module, so consumers do
 not acquire the driver implementation, transport adapters, terminal emulators,
