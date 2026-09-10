@@ -17,6 +17,7 @@ import (
 	tuicastssh "github.com/castingcode/tuicast/ssh"
 	"github.com/castingcode/tuicast/telnet"
 	"github.com/castingcode/tuicast/vt220"
+	"github.com/castingcode/tuicast/workbench"
 	"github.com/castingcode/tuicast/xterm"
 	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -34,8 +35,15 @@ func run(arguments []string, input io.Reader, output io.Writer, logger *slog.Log
 	flags := flag.NewFlagSet("tuicast-driver", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	uiAddress := flags.String("ui-address", "", "TUICast Inspector listen address (for example 127.0.0.1:0)")
+	workbenchEnabled := flags.Bool("workbench", false, "enable TUICast Workbench on the loopback Inspector listener")
 	if err := flags.Parse(arguments); err != nil {
 		return fmt.Errorf("parsing TUICast driver flags: %w", err)
+	}
+	if *workbenchEnabled && *uiAddress == "" {
+		return fmt.Errorf("configuring TUICast Workbench: -ui-address is required")
+	}
+	if *workbenchEnabled && !isLoopbackAddress(*uiAddress) {
+		return fmt.Errorf("configuring TUICast Workbench: -ui-address must be a loopback address")
 	}
 
 	server, err := driver.New(logger, connector, terminal)
@@ -50,7 +58,17 @@ func run(arguments []string, input io.Reader, output io.Writer, logger *slog.Log
 		if err != nil {
 			return errors.Join(fmt.Errorf("listening for TUICast Inspector: %w", err), server.Close())
 		}
-		inspector, err = driverui.New(server)
+		var options []driverui.Option
+		if *workbenchEnabled {
+			manager, managerErr := workbench.New(func(id uint64) (workbench.SessionControl, error) {
+				return server.AcquireSessionControl(id)
+			})
+			if managerErr != nil {
+				return errors.Join(managerErr, listener.Close(), server.Close())
+			}
+			options = append(options, driverui.WithWorkbench(manager))
+		}
+		inspector, err = driverui.New(server, options...)
 		if err != nil {
 			return errors.Join(err, listener.Close(), server.Close())
 		}
@@ -58,6 +76,9 @@ func run(arguments []string, input io.Reader, output io.Writer, logger *slog.Log
 			logger.Warn("TUICast Inspector is listening without authentication or TLS", "address", listener.Addr())
 		}
 		logger.Info("TUICast Inspector listening", "url", "http://"+listener.Addr().String())
+		if *workbenchEnabled {
+			logger.Info("TUICast Workbench enabled", "url", "http://"+listener.Addr().String())
+		}
 		serveResult = make(chan error, 1)
 		go func() { serveResult <- inspector.Serve(listener) }()
 	}

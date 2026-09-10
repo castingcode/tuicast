@@ -32,6 +32,7 @@ type sessionRecord struct {
 	connectionID uint64
 	session      *tuicast.Session
 	terminal     string
+	controlGate  *sync.Mutex
 }
 
 type subscriptionRecord struct {
@@ -51,6 +52,7 @@ type Server struct {
 	connections      map[uint64]connectionRecord
 	sessions         map[uint64]sessionRecord
 	subscriptions    map[uint64]subscriptionRecord
+	controls         map[uint64]*SessionControl
 	nextConnection   uint64
 	nextSession      uint64
 	nextSubscription uint64
@@ -82,6 +84,7 @@ func New(logger *slog.Logger, connectors ConnectorFactory, terminals TerminalFac
 		connections:   make(map[uint64]connectionRecord),
 		sessions:      make(map[uint64]sessionRecord),
 		subscriptions: make(map[uint64]subscriptionRecord),
+		controls:      make(map[uint64]*SessionControl),
 		context:       ctx,
 		cancel:        cancel,
 	}, nil
@@ -160,6 +163,7 @@ func (s *Server) Close() error {
 		subscription.cancel()
 	}
 	s.subscriptions = make(map[uint64]subscriptionRecord)
+	s.controls = make(map[uint64]*SessionControl)
 	s.mu.Unlock()
 
 	if err := s.core.Close(); err != nil {
@@ -340,6 +344,7 @@ func (s *Server) closeConnection(data json.RawMessage) (any, *responseError) {
 		for id, session := range s.sessions {
 			if session.connectionID == params.ConnectionID {
 				s.cancelSessionSubscriptionsLocked(id)
+				delete(s.controls, id)
 				delete(s.sessions, id)
 			}
 		}
@@ -404,6 +409,7 @@ func (s *Server) openSession(data json.RawMessage) (any, *responseError) {
 		connectionID: params.ConnectionID,
 		session:      session,
 		terminal:     params.Terminal,
+		controlGate:  &sync.Mutex{},
 	}
 	s.mu.Unlock()
 	return map[string]uint64{"sessionId": id}, nil
@@ -421,6 +427,7 @@ func (s *Server) closeSession(data json.RawMessage) (any, *responseError) {
 	if exists {
 		delete(s.sessions, params.SessionID)
 		s.cancelSessionSubscriptionsLocked(params.SessionID)
+		delete(s.controls, params.SessionID)
 	}
 	s.mu.Unlock()
 	if !exists {
@@ -454,10 +461,11 @@ func (s *Server) send(data json.RawMessage) (any, *responseError) {
 		}
 		payload = decoded
 	}
-	session, responseErr := s.getSession(params.SessionID)
+	session, release, responseErr := s.getSessionForMutation(params.SessionID)
 	if responseErr != nil {
 		return nil, responseErr
 	}
+	defer release()
 	if err := session.Send(payload); err != nil {
 		return nil, applicationError(err)
 	}
@@ -473,10 +481,11 @@ func (s *Server) press(data json.RawMessage) (any, *responseError) {
 	if err := decodeParams(data, &params); err != nil {
 		return nil, err
 	}
-	session, responseErr := s.getSession(params.SessionID)
+	session, release, responseErr := s.getSessionForMutation(params.SessionID)
 	if responseErr != nil {
 		return nil, responseErr
 	}
+	defer release()
 	modifiers := make([]tuicast.KeyModifier, len(params.Modifiers))
 	for index, modifier := range params.Modifiers {
 		switch modifier {
@@ -505,10 +514,11 @@ func (s *Server) resize(data json.RawMessage) (any, *responseError) {
 	if err := decodeParams(data, &params); err != nil {
 		return nil, err
 	}
-	session, responseErr := s.getSession(params.SessionID)
+	session, release, responseErr := s.getSessionForMutation(params.SessionID)
 	if responseErr != nil {
 		return nil, responseErr
 	}
+	defer release()
 	if err := session.Resize(params.Width, params.Height); err != nil {
 		return nil, applicationError(err)
 	}
@@ -745,6 +755,29 @@ func (s *Server) getSession(id uint64) (*tuicast.Session, *responseError) {
 		return nil, invalidParams("unknown session %d", id)
 	}
 	return record.session, nil
+}
+
+func (s *Server) getSessionForMutation(id uint64) (*tuicast.Session, func(), *responseError) {
+	s.mu.Lock()
+	record, exists := s.sessions[id]
+	s.mu.Unlock()
+	if !exists {
+		return nil, nil, invalidParams("unknown session %d", id)
+	}
+	record.controlGate.Lock()
+	s.mu.Lock()
+	current, stillRegistered := s.sessions[id]
+	_, controlled := s.controls[id]
+	s.mu.Unlock()
+	if !stillRegistered || current.session != record.session {
+		record.controlGate.Unlock()
+		return nil, nil, invalidParams("unknown session %d", id)
+	}
+	if controlled {
+		record.controlGate.Unlock()
+		return nil, nil, applicationError(fmt.Errorf("controlling session %d: session has an exclusive controller", id))
+	}
+	return record.session, record.controlGate.Unlock, nil
 }
 
 func (s *Server) cancelSessionSubscriptionsLocked(sessionID uint64) {

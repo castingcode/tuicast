@@ -29,6 +29,17 @@ go run ./cmd/tuicast-driver -ui-address 127.0.0.1:0
 The resolved URL is logged to stderr. Binding a non-loopback address is
 supported but currently has no authentication or TLS and emits a warning.
 
+Enable the interactive TUICast Workbench on the loopback Inspector listener:
+
+```sh
+go run ./cmd/tuicast-driver -ui-address 127.0.0.1:0 -workbench
+```
+
+Workbench can send terminal input, record assertions and actions, replay the
+result, and download a versioned language-neutral JSON trace. It is restricted
+to loopback addresses. See [`workbench.md`](workbench.md) for its recording and
+exclusive-control behavior.
+
 Standard output is reserved for JSON-RPC responses and notifications. Logs are
 written to standard error. Input may contain consecutive JSON objects separated
 by whitespace; output contains one JSON object per line. Requests execute

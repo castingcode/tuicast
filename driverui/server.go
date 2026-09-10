@@ -15,6 +15,7 @@ import (
 
 	"github.com/castingcode/tuicast"
 	"github.com/castingcode/tuicast/driver"
+	"github.com/castingcode/tuicast/workbench"
 )
 
 // SnapshotSource supplies detached driver state and session screens.
@@ -25,25 +26,52 @@ type SnapshotSource interface {
 
 // Server serves the TUICast Inspector.
 type Server struct {
-	http   *http.Server
-	source SnapshotSource
+	http      *http.Server
+	source    SnapshotSource
+	workbench *workbench.Manager
+}
+
+// Option configures an optional Inspector capability.
+type Option func(*Server) error
+
+// WithWorkbench enables interactive recording and replay routes.
+func WithWorkbench(manager *workbench.Manager) Option {
+	return func(server *Server) error {
+		if manager == nil {
+			return fmt.Errorf("configuring TUICast Workbench: manager is required")
+		}
+		server.workbench = manager
+		return nil
+	}
 }
 
 //go:embed assets/*
 var assets embed.FS
 
 // New creates a read-only Inspector server.
-func New(source SnapshotSource) (*Server, error) {
+func New(source SnapshotSource, options ...Option) (*Server, error) {
 	if source == nil {
 		return nil, fmt.Errorf("creating TUICast Inspector: snapshot source is required")
 	}
 	server := &Server{source: source}
+	for _, option := range options {
+		if option == nil {
+			return nil, fmt.Errorf("creating TUICast Inspector: option is required")
+		}
+		if err := option(server); err != nil {
+			return nil, err
+		}
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", server.health)
 	mux.HandleFunc("GET /readyz", server.ready)
 	mux.HandleFunc("GET /api/state", server.state)
+	mux.HandleFunc("GET /api/capabilities", server.capabilities)
 	mux.HandleFunc("GET /api/sessions/{id}/screens", server.screens)
 	mux.HandleFunc("GET /sessions/{id}", server.application)
+	if server.workbench != nil {
+		server.registerWorkbenchRoutes(mux)
+	}
 	mux.HandleFunc("GET /", server.application)
 	static, err := fs.Sub(assets, "assets")
 	if err != nil {
@@ -56,6 +84,12 @@ func New(source SnapshotSource) (*Server, error) {
 		IdleTimeout:       60 * time.Second,
 	}
 	return server, nil
+}
+
+func (s *Server) capabilities(response http.ResponseWriter, _ *http.Request) {
+	response.Header().Set("Content-Type", "application/json")
+	response.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(response).Encode(map[string]bool{"workbench": s.workbench != nil})
 }
 
 // Serve serves requests until Shutdown is called.
@@ -71,7 +105,11 @@ func (s *Server) Serve(listener net.Listener) error {
 
 // Shutdown gracefully stops the Inspector.
 func (s *Server) Shutdown(ctx context.Context) error {
-	if err := s.http.Shutdown(ctx); err != nil {
+	err := s.http.Shutdown(ctx)
+	if s.workbench != nil {
+		s.workbench.Close()
+	}
+	if err != nil {
 		return fmt.Errorf("shutting down TUICast Inspector: %w", err)
 	}
 	return nil

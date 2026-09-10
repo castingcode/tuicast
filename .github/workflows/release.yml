@@ -69,6 +69,7 @@ jobs:
             -o "$destination/reference-tui${suffix}" ./cmd/reference-tui
           cp LICENSE "$destination/"
           cp schema/openrpc.json "$destination/schema/"
+          cp schema/workbench-recording.schema.json "$destination/schema/"
 
           if [[ "$ARCHIVE" == "zip" ]]; then
             (cd dist && zip -qr "${name}.zip" "$name")

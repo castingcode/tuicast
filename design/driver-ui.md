@@ -13,8 +13,9 @@ operational UI that:
   port; and
 - preserves stdout exclusively for JSON-RPC protocol traffic.
 
-The first version should not send terminal input, display credentials, or be
-reachable off-host by default.
+Inspector should not send terminal input or display credentials. The separately
+enabled TUICast Workbench capability owns interactive recording and remains
+restricted to loopback listeners; see [`workbench.md`](workbench.md).
 
 ## Command-line contract
 

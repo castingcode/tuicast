@@ -72,6 +72,13 @@ func TestDriverProtocol(t *testing.T) {
 		So(snapshot.Sessions[0].Width, ShouldEqual, 20)
 		So(snapshot.Sessions[0].Height, ShouldEqual, 3)
 		So(snapshot.Sessions[0].State, ShouldEqual, "active")
+		control, err := server.AcquireSessionControl(sessionID)
+		So(err, ShouldBeNil)
+		_, responseErr = server.send(raw(map[string]any{"sessionId": sessionID, "text": "blocked"}))
+		So(responseErr.Code, ShouldEqual, -32000)
+		So(responseErr.Message, ShouldContainSubstring, "exclusive controller")
+		So(control.Send([]byte("CONTROLLED")), ShouldBeNil)
+		control.Release()
 
 		result, responseErr := server.send(raw(map[string]any{
 			"sessionId": sessionID,

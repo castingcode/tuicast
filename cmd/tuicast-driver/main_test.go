@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/castingcode/tuicast"
@@ -45,13 +46,14 @@ func TestComposition(t *testing.T) {
 		So(callback, ShouldBeNil)
 	})
 
-	Convey("The Inspector uses a resolved ephemeral loopback port and shuts down with the driver", t, func() {
+	Convey("Inspector and Workbench use a resolved ephemeral loopback port and shut down with the driver", t, func() {
 		var logs bytes.Buffer
 		logger := slog.New(slog.NewTextHandler(&logs, nil))
 		input := bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"driver.shutdown"}` + "\n")
 
-		err := run([]string{"-ui-address", "127.0.0.1:0"}, input, io.Discard, logger)
+		err := run([]string{"-ui-address", "127.0.0.1:0", "-workbench"}, input, io.Discard, logger)
 		So(err, ShouldBeNil)
+		So(logs.String(), ShouldContainSubstring, "TUICast Workbench enabled")
 		matches := regexp.MustCompile(`url=http://([^ ]+)`).FindStringSubmatch(logs.String())
 		So(matches, ShouldHaveLength, 2)
 		connection, err := net.Dial("tcp", matches[1])
@@ -63,5 +65,16 @@ func TestComposition(t *testing.T) {
 		So(isLoopbackAddress("127.0.0.1:0"), ShouldBeTrue)
 		So(isLoopbackAddress("[::1]:0"), ShouldBeTrue)
 		So(isLoopbackAddress("0.0.0.0:8080"), ShouldBeFalse)
+	})
+
+	Convey("Workbench requires an explicitly configured loopback Inspector", t, func() {
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		err := run([]string{"-workbench"}, strings.NewReader(""), io.Discard, logger)
+		So(err, ShouldNotBeNil)
+		So(err.Error(), ShouldContainSubstring, "-ui-address is required")
+
+		err = run([]string{"-workbench", "-ui-address", "0.0.0.0:8080"}, strings.NewReader(""), io.Discard, logger)
+		So(err, ShouldNotBeNil)
+		So(err.Error(), ShouldContainSubstring, "must be a loopback address")
 	})
 }

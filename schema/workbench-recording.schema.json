@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://castingcode.github.io/tuicast/schema/workbench-recording.schema.json",
+  "title": "TUICast Workbench Recording",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "session", "steps"],
+  "properties": {
+    "version": { "const": "1" },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "terminal", "width", "height"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "terminal": { "type": "string", "minLength": 1 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action", "text", "timeoutMilliseconds"],
+            "properties": {
+              "action": { "const": "waitForText" },
+              "text": { "type": "string", "minLength": 1 },
+              "timeoutMilliseconds": { "type": "integer", "minimum": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action"],
+            "properties": {
+              "action": { "const": "type" },
+              "text": { "type": "string", "minLength": 1 },
+              "parameter": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" }
+            },
+            "oneOf": [
+              { "required": ["text"], "not": { "required": ["parameter"] } },
+              { "required": ["parameter"], "not": { "required": ["text"] } }
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action", "key"],
+            "properties": {
+              "action": { "const": "press" },
+              "key": { "type": "string", "minLength": 1 },
+              "modifiers": {
+                "type": "array",
+                "items": { "enum": ["Shift", "Alt", "Control"] },
+                "uniqueItems": true
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
