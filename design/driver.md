@@ -18,6 +18,17 @@ does the driver's JSON-RPC interface.
 go run ./cmd/tuicast-driver
 ```
 
+The optional, read-only TUICast Inspector provides health endpoints, current
+connection and session metadata, and live terminal screens. Bind it to an
+ephemeral loopback port with:
+
+```sh
+go run ./cmd/tuicast-driver -ui-address 127.0.0.1:0
+```
+
+The resolved URL is logged to stderr. Binding a non-loopback address is
+supported but currently has no authentication or TLS and emits a warning.
+
 Standard output is reserved for JSON-RPC responses and notifications. Logs are
 written to standard error. Input may contain consecutive JSON objects separated
 by whitespace; output contains one JSON object per line. Requests execute

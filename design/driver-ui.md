@@ -2,14 +2,15 @@
 
 ## Goals
 
-The driver should expose a small, read-only operational UI that:
+The driver should optionally expose TUICast Inspector, a small, read-only
+operational UI that:
 
 - lists active connections and sessions;
 - shows connection ID, protocol, remote address, session ID, terminal profile,
   dimensions, screen revision, and lifecycle/error state;
 - links each session to a live terminal screen;
-- listens on an ephemeral loopback port by default and permits an explicit
-  address or port; and
+- listens on an operator-selected address, including an ephemeral loopback
+  port; and
 - preserves stdout exclusively for JSON-RPC protocol traffic.
 
 The first version should not send terminal input, display credentials, or be
@@ -17,16 +18,22 @@ reachable off-host by default.
 
 ## Command-line contract
 
-Add a `-ui-address` flag whose default is `127.0.0.1:0`, so the UI is available
-without configuration. Port zero asks the operating system for an available
-ephemeral port. An operator can choose a stable port with, for example:
+The `-ui-address` flag enables the Inspector. It is empty by default so the
+stdio driver does not unexpectedly open a network listener. Port zero asks the
+operating system for an available ephemeral port:
+
+```sh
+tuicast-driver -ui-address 127.0.0.1:0
+```
+
+An operator can instead choose a stable port with, for example:
 
 ```sh
 tuicast-driver -ui-address 127.0.0.1:8080
 ```
 
-An empty `-ui-address` disables the UI for embedders or constrained execution
-environments that do not want an additional listener.
+This opt-in preserves the driver's port-free default for SDK test workers and
+constrained execution environments.
 
 After calling `net.Listen`, log the resolved URL through the injected
 `slog.Logger` at Info level. The command's logger writes to stderr, avoiding
@@ -84,6 +91,7 @@ Use `http.ServeMux` and `http.Server` directly:
 | `GET /api/state` | Current detached driver snapshot as JSON. |
 | `GET /api/sessions/{id}/screens` | Screen updates as server-sent events. |
 | `GET /healthz` | Liveness response for local/container tooling. |
+| `GET /readyz` | Readiness response indicating whether the driver remains open. |
 
 Return 404 for an unknown or closed session. Set `Cache-Control: no-store` on
 API and HTML responses, enforce GET-only handlers, configure read-header and

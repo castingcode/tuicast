@@ -1,7 +1,11 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -9,6 +13,7 @@ import (
 
 	"github.com/castingcode/tuicast"
 	"github.com/castingcode/tuicast/driver"
+	"github.com/castingcode/tuicast/driverui"
 	tuicastssh "github.com/castingcode/tuicast/ssh"
 	"github.com/castingcode/tuicast/telnet"
 	"github.com/castingcode/tuicast/vt220"
@@ -19,15 +24,65 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	server, err := driver.New(logger, connector, terminal)
-	if err != nil {
-		logger.Error("TUICast driver initialization failed", "error", err)
-		os.Exit(1)
-	}
-	if err := server.Run(os.Stdin, os.Stdout); err != nil {
+	if err := run(os.Args[1:], os.Stdin, os.Stdout, logger); err != nil {
 		logger.Error("TUICast driver stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+func run(arguments []string, input io.Reader, output io.Writer, logger *slog.Logger) error {
+	flags := flag.NewFlagSet("tuicast-driver", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	uiAddress := flags.String("ui-address", "", "TUICast Inspector listen address (for example 127.0.0.1:0)")
+	if err := flags.Parse(arguments); err != nil {
+		return fmt.Errorf("parsing TUICast driver flags: %w", err)
+	}
+
+	server, err := driver.New(logger, connector, terminal)
+	if err != nil {
+		return fmt.Errorf("initializing TUICast driver: %w", err)
+	}
+
+	var inspector *driverui.Server
+	var serveResult chan error
+	if *uiAddress != "" {
+		listener, err := net.Listen("tcp", *uiAddress)
+		if err != nil {
+			return errors.Join(fmt.Errorf("listening for TUICast Inspector: %w", err), server.Close())
+		}
+		inspector, err = driverui.New(server)
+		if err != nil {
+			return errors.Join(err, listener.Close(), server.Close())
+		}
+		if !isLoopbackAddress(*uiAddress) {
+			logger.Warn("TUICast Inspector is listening without authentication or TLS", "address", listener.Addr())
+		}
+		logger.Info("TUICast Inspector listening", "url", "http://"+listener.Addr().String())
+		serveResult = make(chan error, 1)
+		go func() { serveResult <- inspector.Serve(listener) }()
+	}
+
+	runErr := server.Run(input, output)
+	if inspector == nil {
+		return runErr
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	shutdownErr := inspector.Shutdown(ctx)
+	serveErr := <-serveResult
+	return errors.Join(runErr, shutdownErr, serveErr)
+}
+
+func isLoopbackAddress(address string) bool {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func connector(options driver.ConnectionOptions) (tuicast.Connector, error) {

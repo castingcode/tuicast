@@ -24,11 +24,14 @@ type TerminalFactory func(profile string, width, height int) (tuicast.Terminal, 
 
 type connectionRecord struct {
 	connection *tuicast.Connection
+	protocol   string
+	address    string
 }
 
 type sessionRecord struct {
 	connectionID uint64
 	session      *tuicast.Session
+	terminal     string
 }
 
 type subscriptionRecord struct {
@@ -315,7 +318,11 @@ func (s *Server) openConnection(data json.RawMessage) (any, *responseError) {
 	}
 	s.nextConnection++
 	id := s.nextConnection
-	s.connections[id] = connectionRecord{connection: connection}
+	s.connections[id] = connectionRecord{
+		connection: connection,
+		protocol:   options.Protocol,
+		address:    options.Address,
+	}
 	return map[string]uint64{"connectionId": id}, nil
 }
 
@@ -393,7 +400,11 @@ func (s *Server) openSession(data json.RawMessage) (any, *responseError) {
 	}
 	s.nextSession++
 	id := s.nextSession
-	s.sessions[id] = sessionRecord{connectionID: params.ConnectionID, session: session}
+	s.sessions[id] = sessionRecord{
+		connectionID: params.ConnectionID,
+		session:      session,
+		terminal:     params.Terminal,
+	}
 	s.mu.Unlock()
 	return map[string]uint64{"sessionId": id}, nil
 }

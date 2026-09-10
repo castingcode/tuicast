@@ -62,6 +62,16 @@ func TestDriverProtocol(t *testing.T) {
 		}))
 		So(responseErr, ShouldBeNil)
 		sessionID := opened.(map[string]uint64)["sessionId"]
+		snapshot := server.DriverSnapshot()
+		So(snapshot.Connections, ShouldResemble, []ConnectionSnapshot{{
+			ID: connectionID, Protocol: "memory", Address: "reference",
+		}})
+		So(snapshot.Sessions, ShouldHaveLength, 1)
+		So(snapshot.Sessions[0].ID, ShouldEqual, sessionID)
+		So(snapshot.Sessions[0].Terminal, ShouldEqual, string(tuicast.ProfileVT220))
+		So(snapshot.Sessions[0].Width, ShouldEqual, 20)
+		So(snapshot.Sessions[0].Height, ShouldEqual, 3)
+		So(snapshot.Sessions[0].State, ShouldEqual, "active")
 
 		result, responseErr := server.send(raw(map[string]any{
 			"sessionId": sessionID,
@@ -111,6 +121,9 @@ func TestDriverProtocol(t *testing.T) {
 		So(responseErr, ShouldBeNil)
 		So(result.(screenResult).Width, ShouldEqual, 30)
 		So(result.(screenResult).Height, ShouldEqual, 4)
+		snapshot = server.DriverSnapshot()
+		So(snapshot.Sessions[0].Width, ShouldEqual, 30)
+		So(snapshot.Sessions[0].Height, ShouldEqual, 4)
 
 		_, responseErr = server.closeConnection(raw(map[string]uint64{"connectionId": connectionID}))
 		So(responseErr, ShouldBeNil)

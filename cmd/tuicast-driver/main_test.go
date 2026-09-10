@@ -1,6 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"io"
+	"log/slog"
+	"net"
+	"regexp"
 	"testing"
 
 	"github.com/castingcode/tuicast"
@@ -38,5 +43,25 @@ func TestComposition(t *testing.T) {
 		})
 		So(err, ShouldNotBeNil)
 		So(callback, ShouldBeNil)
+	})
+
+	Convey("The Inspector uses a resolved ephemeral loopback port and shuts down with the driver", t, func() {
+		var logs bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&logs, nil))
+		input := bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"driver.shutdown"}` + "\n")
+
+		err := run([]string{"-ui-address", "127.0.0.1:0"}, input, io.Discard, logger)
+		So(err, ShouldBeNil)
+		matches := regexp.MustCompile(`url=http://([^ ]+)`).FindStringSubmatch(logs.String())
+		So(matches, ShouldHaveLength, 2)
+		connection, err := net.Dial("tcp", matches[1])
+		So(err, ShouldNotBeNil)
+		So(connection, ShouldBeNil)
+	})
+
+	Convey("Inspector loopback detection distinguishes exposed listeners", t, func() {
+		So(isLoopbackAddress("127.0.0.1:0"), ShouldBeTrue)
+		So(isLoopbackAddress("[::1]:0"), ShouldBeTrue)
+		So(isLoopbackAddress("0.0.0.0:8080"), ShouldBeFalse)
 	})
 }

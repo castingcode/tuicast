@@ -42,21 +42,25 @@ Go version: see `go.mod`.
 
 ## Project Documentation
 
-Before planning or changing a subsystem, inspect the `docs/` directory and
+Before planning or changing a subsystem, inspect the `design/` directory and
 read the documentation relevant to that work. The list below is a guide, not
 an exhaustive inventory: documentation may be added without this file being
 updated, so do not assume unlisted documents are irrelevant.
 
-- `docs/architecture.md` — system design, package boundaries, and dependency
+- `design/architecture.md` — system design, package boundaries, and dependency
   direction
-- `docs/session-lifecycle.md` — server, connection, and session ownership and
+- `design/session-lifecycle.md` — server, connection, and session ownership and
   lifecycle behavior
-- `docs/terminal-behavior.md` — terminal contract and supported VT220/xterm
+- `design/terminal-behavior.md` — terminal contract and supported VT220/xterm
   behavior
 
 Keep implementation and documentation consistent. When behavior or an
 architectural contract changes, update the corresponding document as part of
 the same work.
+
+Note that the `design` folder is intended for design decisions, ADR documentation,
+changelogs, and the like. The `docs` folder is intended for material for someone
+who wants to use TUICast.
 
 ## Package Structure
 
