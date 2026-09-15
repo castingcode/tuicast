@@ -15,10 +15,9 @@ import (
 
 // Config configures authentication and host identity for a reference server.
 type Config struct {
-	Username string
-	Password string
-	Signer   gossh.Signer
-	Logger   *slog.Logger
+	Users  map[string]string
+	Signer gossh.Signer
+	Logger *slog.Logger
 }
 
 // Serve accepts SSH connections until the context is canceled or the listener
@@ -30,8 +29,13 @@ func Serve(ctx context.Context, listener net.Listener, config Config) error {
 	if listener == nil {
 		return fmt.Errorf("serving reference TUI over SSH: listener is required")
 	}
-	if config.Username == "" || config.Password == "" {
-		return fmt.Errorf("serving reference TUI over SSH: username and password are required")
+	if len(config.Users) == 0 {
+		return fmt.Errorf("serving reference TUI over SSH: at least one user is required")
+	}
+	for username, password := range config.Users {
+		if username == "" || password == "" {
+			return fmt.Errorf("serving reference TUI over SSH: usernames and passwords must not be empty")
+		}
 	}
 	if config.Signer == nil {
 		return fmt.Errorf("serving reference TUI over SSH: host signer is required")
@@ -42,7 +46,8 @@ func Serve(ctx context.Context, listener net.Listener, config Config) error {
 	}
 	serverConfig := &gossh.ServerConfig{
 		PasswordCallback: func(metadata gossh.ConnMetadata, password []byte) (*gossh.Permissions, error) {
-			if metadata.User() != config.Username || string(password) != config.Password {
+			expected, found := config.Users[metadata.User()]
+			if !found || string(password) != expected {
 				return nil, fmt.Errorf("authenticating SSH user: invalid credentials")
 			}
 			return nil, nil

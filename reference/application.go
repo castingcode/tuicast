@@ -102,12 +102,12 @@ func New(width, height int) (*Application, error) {
 
 	username := textinput.New()
 	username.Prompt = ""
-	username.Placeholder = "operator"
+	username.Placeholder = ""
 	username.CharLimit = 24
 	username.SetWidth(min(24, max(8, width-12)))
 	password := textinput.New()
 	password.Prompt = ""
-	password.Placeholder = "password"
+	password.Placeholder = ""
 	password.EchoMode = textinput.EchoPassword
 	password.EchoCharacter = '*'
 	password.CharLimit = 24
@@ -531,8 +531,10 @@ func (a *Application) viewLogin() string {
 		headingStyle.Render("LOGIN / AUTHENTICATION"),
 		"",
 		"User ID:  " + a.loginInputs[0].View(),
+		"          " + strings.Repeat("─", a.loginInputs[0].Width()),
 		"",
 		"Password: " + a.loginInputs[1].View(),
+		"          " + strings.Repeat("─", a.loginInputs[1].Width()),
 		"",
 		helpStyle.Render("F1 Login    F2 Clear    Ctrl-C Exit"),
 		"",

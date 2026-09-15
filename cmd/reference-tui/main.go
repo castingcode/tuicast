@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -38,6 +39,7 @@ func run(ctx context.Context, arguments []string, input *os.File, output io.Writ
 	telnetAddress := flags.String("telnet-address", "", "listen address for Telnet (for example 127.0.0.1:2323)")
 	sshUsername := flags.String("ssh-username", "operator", "SSH username")
 	sshPassword := flags.String("ssh-password", "casting", "SSH password")
+	sshUsersFile := flags.String("ssh-users-file", "", "JSON file mapping SSH usernames to passwords")
 	sshHostKey := flags.String("ssh-host-key", "", "PEM-encoded SSH host private key; generated in memory when omitted")
 	if err := flags.Parse(arguments); errors.Is(err, flag.ErrHelp) {
 		return nil
@@ -51,6 +53,10 @@ func run(ctx context.Context, arguments []string, input *os.File, output io.Writ
 		return fmt.Errorf("configuring reference TUI server: --ssh-address and --telnet-address are mutually exclusive")
 	}
 	if *sshAddress != "" {
+		users, err := sshUsers(*sshUsersFile, *sshUsername, *sshPassword)
+		if err != nil {
+			return err
+		}
 		signer, err := hostSigner(*sshHostKey)
 		if err != nil {
 			return err
@@ -61,10 +67,9 @@ func run(ctx context.Context, arguments []string, input *os.File, output io.Writ
 		}
 		logger.Info("reference TUI SSH server listening", "address", listener.Addr(), "hostKeyFingerprint", gossh.FingerprintSHA256(signer.PublicKey()))
 		return referencessh.Serve(ctx, listener, referencessh.Config{
-			Username: *sshUsername,
-			Password: *sshPassword,
-			Signer:   signer,
-			Logger:   logger,
+			Users:  users,
+			Signer: signer,
+			Logger: logger,
 		})
 	}
 	if *telnetAddress != "" {
@@ -76,6 +81,29 @@ func run(ctx context.Context, arguments []string, input *os.File, output io.Writ
 		return referencetelnet.Serve(ctx, listener, logger)
 	}
 	return runInteractive(input, output)
+}
+
+func sshUsers(path, username, password string) (map[string]string, error) {
+	if path == "" {
+		return map[string]string{username: password}, nil
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading SSH users file: %w", err)
+	}
+	users := make(map[string]string)
+	if err := json.Unmarshal(contents, &users); err != nil {
+		return nil, fmt.Errorf("parsing SSH users file: %w", err)
+	}
+	if len(users) == 0 {
+		return nil, fmt.Errorf("parsing SSH users file: at least one user is required")
+	}
+	for username, password := range users {
+		if username == "" || password == "" {
+			return nil, fmt.Errorf("parsing SSH users file: usernames and passwords must not be empty")
+		}
+	}
+	return users, nil
 }
 
 func runInteractive(input *os.File, output io.Writer) error {

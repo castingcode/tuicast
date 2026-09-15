@@ -31,10 +31,9 @@ func TestServer(t *testing.T) {
 		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 		go func() {
 			serveDone <- referencessh.Serve(ctx, listener, referencessh.Config{
-				Username: "operator",
-				Password: "casting",
-				Signer:   signer,
-				Logger:   logger,
+				Users:  map[string]string{"operator": "casting", "supervisor": "warehouse"},
+				Signer: signer,
+				Logger: logger,
 			})
 		}()
 		defer func() {
@@ -45,8 +44,8 @@ func TestServer(t *testing.T) {
 		connector, err := tuicastssh.NewConnector(tuicastssh.Config{
 			Address: listener.Addr().String(),
 			ClientConfig: &gossh.ClientConfig{
-				User:            "operator",
-				Auth:            []gossh.AuthMethod{gossh.Password("casting")},
+				User:            "supervisor",
+				Auth:            []gossh.AuthMethod{gossh.Password("warehouse")},
 				HostKeyCallback: gossh.FixedHostKey(signer.PublicKey()),
 			},
 		})

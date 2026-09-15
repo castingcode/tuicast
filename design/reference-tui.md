@@ -5,7 +5,7 @@ integration testing. It lives in the same Go module as the library so API,
 emulation behavior, and reference scenarios can change atomically and remain
 covered by `go test ./...`.
 
-`docs/proposal-reference-tui.md` is background material only. This document
+`design/proposal-reference-tui.md` is background material only. This document
 describes the implemented behavior.
 
 ## Running
@@ -24,17 +24,32 @@ standard error. SSH generates an in-memory Ed25519 host key unless a stable PEM
 key is supplied.
 
 ```sh
-go run ./cmd/reference-tui --ssh-address 127.0.0.1:2222
-go run ./cmd/reference-tui --telnet-address 127.0.0.1:2323
+go run ./cmd/reference-tui -ssh-address 127.0.0.1:2222
+go run ./cmd/reference-tui -telnet-address 127.0.0.1:2323
 go run ./cmd/reference-tui \
-  --ssh-address 127.0.0.1:2222 \
-  --ssh-username operator \
-  --ssh-password casting \
-  --ssh-host-key ./host-key
+  -ssh-address 127.0.0.1:2222 \
+  -ssh-username operator \
+  -ssh-password casting \
+  -ssh-host-key ./host-key
 ```
 
 SSH PTY window changes and Telnet NAWS updates are forwarded to Bubble Tea.
-The SSH and Telnet address flags are mutually exclusive.
+The SSH and Telnet address flags are mutually exclusive. Multiple SSH transport
+credentials can be supplied as a JSON object mapping usernames to passwords;
+the file replaces the `-ssh-username` and `-ssh-password` credential:
+
+```json
+{
+  "operator": "casting",
+  "supervisor": "warehouse"
+}
+```
+
+```sh
+go run ./cmd/reference-tui \
+  -ssh-address 127.0.0.1:2222 \
+  -ssh-users-file ./users.json
+```
 
 The deterministic test credentials are:
 

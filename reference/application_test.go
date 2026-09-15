@@ -22,6 +22,9 @@ func TestApplication(t *testing.T) {
 
 		So(view, ShouldContainSubstring, "LOGIN / AUTHENTICATION")
 		So(view, ShouldContainSubstring, "operator / casting")
+		So(view, ShouldContainSubstring, "────────")
+		So(application.loginInputs[0].Placeholder, ShouldBeEmpty)
+		So(application.loginInputs[1].Placeholder, ShouldBeEmpty)
 		So(application.loginInputs[0].Focused(), ShouldBeTrue)
 	})
 
