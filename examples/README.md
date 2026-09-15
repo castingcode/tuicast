@@ -30,4 +30,9 @@ these files rather than copy them. Each scenario connects in its `Background`;
 an after-scenario hook logs out when authenticated and always closes the
 session, connection, and driver, including after failures.
 
+Godog attaches a rendered terminal capture after changed outcome screens and
+immediately after failures. CI publishes these captures in a Cucumber HTML
+report. See [`design/cucumber.md`](../design/cucumber.md) for the feature-writing,
+lifecycle, capture, and reporting conventions.
+
 See [reference/README.md](reference/README.md) for a runnable walkthrough.

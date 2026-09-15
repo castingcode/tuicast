@@ -12,14 +12,17 @@ import (
 
 	tuicast "github.com/castingcode/tuicast/sdk/go"
 	"github.com/cucumber/godog"
+	messages "github.com/cucumber/messages/go/v34"
 )
 
 const referencePassword = "cast" + "ing"
 
 type scenario struct {
-	driver     *tuicast.Driver
-	connection *tuicast.Connection
-	session    *tuicast.Session
+	driver              *tuicast.Driver
+	connection          *tuicast.Connection
+	session             *tuicast.Session
+	lastCaptureRevision uint64
+	hasCapture          bool
 }
 
 func main() {
@@ -32,7 +35,7 @@ func testSuite(format string) godog.TestSuite {
 		Name:                "reference-tui",
 		ScenarioInitializer: state.initialize,
 		Options: &godog.Options{
-			Format: format,
+			Format: environment("TUICAST_CUCUMBER_FORMAT", format),
 			Paths:  []string{featuresPath()},
 			Strict: true,
 		},
@@ -65,15 +68,54 @@ func (s *scenario) initialize(ctx *godog.ScenarioContext) {
 	ctx.Then(`^the latest key is "([^"]*)"$`, s.latestKey)
 	ctx.Then(`^the latest key modifiers are "([^"]*)"$`, s.latestKeyModifiers)
 
+	ctx.StepContext().After(s.captureAfterStep)
 	ctx.After(func(ctx context.Context, _ *godog.Scenario, _ error) (context.Context, error) {
 		return ctx, s.close()
 	})
+}
+
+func (s *scenario) captureAfterStep(ctx context.Context, step *godog.Step, status godog.StepResultStatus, _ error) (context.Context, error) {
+	if s.session == nil || status == godog.StepSkipped {
+		return ctx, nil
+	}
+	failed := status != godog.StepPassed
+	if !failed && step.Type != messages.PickleStepType_OUTCOME {
+		return ctx, nil
+	}
+	screen, err := s.session.Screen(ctx)
+	if err != nil {
+		return ctx, fmt.Errorf("capturing terminal after step %q: %w", step.Text, err)
+	}
+	if !failed && s.hasCapture && screen.Revision == s.lastCaptureRevision {
+		return ctx, nil
+	}
+	name := fmt.Sprintf("terminal-revision-%d.html", screen.Revision)
+	if failed {
+		name = fmt.Sprintf("failed-terminal-revision-%d.html", screen.Revision)
+	}
+	attachments := []godog.Attachment{{
+		Body:      terminalCaptureHTML(screen),
+		FileName:  name,
+		MediaType: "text/html",
+	}}
+	if failed {
+		attachments = append(attachments, godog.Attachment{
+			Body:      []byte(screen.Text()),
+			FileName:  fmt.Sprintf("failed-terminal-revision-%d.txt", screen.Revision),
+			MediaType: "text/plain",
+		})
+	}
+	s.lastCaptureRevision = screen.Revision
+	s.hasCapture = true
+	return godog.Attach(ctx, attachments...), nil
 }
 
 func (s *scenario) connect(ctx context.Context) error {
 	if s.driver != nil || s.connection != nil || s.session != nil {
 		return fmt.Errorf("connecting to reference TUI: scenario already has an active fixture")
 	}
+	s.lastCaptureRevision = 0
+	s.hasCapture = false
 	driver, err := tuicast.Launch(ctx, tuicast.WithDriverPath(environment("TUICAST_DRIVER", "tuicast-driver")))
 	if err != nil {
 		return fmt.Errorf("launching driver: %w", err)

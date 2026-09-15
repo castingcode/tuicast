@@ -1,0 +1,11 @@
+{
+  "name": "tuicast-example-reporting",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cucumber-report": "node generate-cucumber-report.mjs"
+  },
+  "devDependencies": {
+    "multiple-cucumber-html-reporter": "4.3.0"
+  }
+}

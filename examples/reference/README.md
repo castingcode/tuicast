@@ -33,6 +33,22 @@ cd examples/go
 TUICAST_DRIVER=/tmp/tuicast-example/tuicast-driver go run ./cucumber
 ```
 
+To generate the same HTML report published by CI, run Godog's Cucumber JSON
+formatter and then the pinned report generator from the repository root:
+
+```sh
+mkdir -p cucumber-reports/json
+cd examples/go
+TUICAST_DRIVER=/tmp/tuicast-example/tuicast-driver \
+TUICAST_CUCUMBER_FORMAT="pretty,cucumber:$PWD/../../cucumber-reports/json/cucumber.json" \
+  go test ./cucumber
+cd ../..
+npm ci --prefix examples/reporting
+npm --prefix examples/reporting run cucumber-report -- \
+  "$PWD/cucumber-reports/json" \
+  "$PWD/cucumber-reports/html"
+```
+
 Alternatively, start and stop the reference fixture with Docker Compose:
 
 ```sh
