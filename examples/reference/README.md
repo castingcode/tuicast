@@ -26,6 +26,13 @@ cd examples/go
 TUICAST_DRIVER=/tmp/tuicast-example/tuicast-driver go test -v ./...
 ```
 
+Run the shared Cucumber features through their Go/Godog bindings:
+
+```sh
+cd examples/go
+TUICAST_DRIVER=/tmp/tuicast-example/tuicast-driver go run ./cucumber
+```
+
 Alternatively, start and stop the reference fixture with Docker Compose:
 
 ```sh

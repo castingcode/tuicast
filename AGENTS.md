@@ -90,7 +90,7 @@ the binary or the embedding application.
 
 ## Architecture
 
-See `docs/architecture.md` for the full design and check `docs/` for any newer
+See `design/architecture.md` for the full design and check `design/` for any newer
 or more specific documentation relevant to the work.
 
 **Library first:** The exported API must be suitable for embedding. Keep the
