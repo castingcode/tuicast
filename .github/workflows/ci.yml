@@ -44,6 +44,24 @@ jobs:
           fi
           git diff --check
 
+      - name: Check installer syntax
+        shell: bash
+        run: |
+          sh -n install.sh
+          pwsh -NoProfile -Command '
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Join-Path $PWD "install.ps1"),
+              [ref]$tokens,
+              [ref]$errors
+            ) > $null
+            if ($errors.Count -gt 0) {
+              $errors | Format-List | Out-String | Write-Error
+              exit 1
+            }
+          '
+
       - name: Verify module files
         shell: bash
         run: |

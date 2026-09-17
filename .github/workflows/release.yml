@@ -141,12 +141,18 @@ jobs:
     needs: [build, publish-images]
     runs-on: ubuntu-latest
     steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
       - name: Download release archives
         uses: actions/download-artifact@v7
         with:
           pattern: release-*
           path: dist
           merge-multiple: true
+
+      - name: Add installers
+        run: cp install.sh install.ps1 dist/
 
       - name: Generate checksums
         working-directory: dist
