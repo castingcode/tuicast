@@ -5,6 +5,7 @@
 ## Table of Contents
 - [Background](#Background)
 - [Installation](#installation)
+- [Running the Reference TUI](#running-the-reference-tui)
 
 ## Background
 - Goal
@@ -128,3 +129,83 @@ The reference TUI and MCP server also support go install:
 go install github.com/castingcode/tuicast/cmd/reference-tui@latest
 go install github.com/castingcode/tuicast/cmd/tuicast-mcp@latest
 ```
+
+## Running the Reference TUI
+
+The reference TUI is a deterministic terminal application for demonstrations, integration tests, and exercising TUICast automation.
+
+### Run interactively
+
+```sh
+reference-tui
+```
+
+Use `Ctrl-C` to exit.
+
+### Serve over SSH
+
+```sh
+reference-tui --ssh-address 127.0.0.1:2222
+```
+
+Connect from another terminal:
+
+```sh
+ssh -tt \
+  -o PreferredAuthentications=password \
+  -o PubkeyAuthentication=no \
+  operator@127.0.0.1 -p 2222
+```
+
+Default credentials:
+
+```text
+Username: operator
+Password: casting
+```
+
+Custom credentials can be provided when starting the server:
+
+```sh
+reference-tui \
+  -ssh-address 127.0.0.1:2222 \
+  -ssh-username warehouse \
+  -ssh-password secret
+```
+
+Or by using the `-ssh-users-file` and supplying a path to a json file containing key value pairs
+of user:password, such as `{"operator":"casting","supervisor":"warehouse"}`.
+
+To use a stable SSH host key:
+
+```sh
+reference-tui \
+  -ssh-address 127.0.0.1:2222 \
+  -ssh-host-key ./host-key
+```
+
+These credentials are intended for local demonstrations and testing, not production use.
+
+### Serve over Telnet
+
+```sh
+reference-tui -telnet-address 127.0.0.1:2323
+```
+
+Connect from another terminal:
+
+```sh
+telnet 127.0.0.1 2323
+```
+
+The SSH and Telnet address options are mutually exclusive. Start separate processes when both protocols are needed.
+
+### Run VTTEST scenarios
+
+The reference application can launch the external `vttest` utility from its menu. Install it separately and ensure it is on `PATH`:
+
+```sh
+brew install vttest
+```
+
+On Linux, install `vttest` through your distribution’s package manager.
