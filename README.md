@@ -41,9 +41,26 @@
 
 ## Installation
 
+### SDK
+
+The SDK launches tuicast-driver, so install that separately and make sure it is available on your PATH.
+
+#### Go
+
+To install the SDK for Go, use go get.
+```
+go get github.com/castingcode/tuicast/sdk/go@latest
+```
+Then in your code, import the SDK as:
+```
+import tuicast "github.com/castingcode/tuicast/sdk/go"
+```
+
+### Driver and Other Binaries - Using the install script
+
 The default destination is ./bin. Add the selected directory to PATH if necessary.
 
-### macOS and Linux
+#### macOS and Linux
 
 Install the driver into ./bin:
 ```
@@ -72,7 +89,7 @@ curl --proto '=https' --tlsv1.2 -LsSf \
   sh -s -- --component driver v0.0.1
 ```
 
-### Windows PowerShell
+#### Windows PowerShell
 Install the driver:
 ```
 $install = [scriptblock]::Create((irm `
@@ -94,4 +111,20 @@ Everything in a chosen directory:
 Specific version:
 ```
 & $install -Component driver -Version v0.0.1
+```
+
+### Driver and Other Binaries - Using Go install
+
+Alternatively, you can use `go install` to install the binaries.
+Ensure $GOBIN or $GOPATH/bin is on PATH, as the SDK will launch the driver.
+
+To install, run:
+```
+go install github.com/castingcode/tuicast/cmd/tuicast-driver@latest
+```
+
+The reference TUI and MCP server also support go install:
+```
+go install github.com/castingcode/tuicast/cmd/reference-tui@latest
+go install github.com/castingcode/tuicast/cmd/tuicast-mcp@latest
 ```
