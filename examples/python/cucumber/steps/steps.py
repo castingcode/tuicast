@@ -1,15 +1,16 @@
 import os
 
-from behave import given, then, when
-
 import tuicast
+from behave import given, then, when
 
 PASSWORD = "casting"
 
 
 @given("I am connected to the reference TUI")
 def connect(context):
-    context.driver = tuicast.Driver.launch(os.getenv("TUICAST_DRIVER", "tuicast-driver"))
+    context.driver = tuicast.Driver.launch(
+        os.getenv("TUICAST_DRIVER", "tuicast-driver")
+    )
     context.connection = context.driver.connect(
         tuicast.SSH(
             os.getenv("TUICAST_REFERENCE_ADDRESS", "127.0.0.1:2222"),
@@ -18,7 +19,9 @@ def connect(context):
             insecure_skip_host_key_check=True,
         )
     )
-    context.session = context.connection.open_session(terminal=tuicast.Terminal.XTERM_256COLOR)
+    context.session = context.connection.open_session(
+        terminal=tuicast.Terminal.XTERM_256COLOR
+    )
     context.session.wait_for_text("LOGIN / AUTHENTICATION", stable_for=0.05)
 
 
@@ -53,7 +56,9 @@ def press(context, name):
 
 @when('I select the "{option}" menu option')
 def select(context, option):
-    for _ in range({"Colors and Attributes": 4, "Function Keys": 6, "Unicode": 10}[option]):
+    for _ in range(
+        {"Colors and Attributes": 4, "Function Keys": 6, "Unicode": 10}[option]
+    ):
         context.session.press(tuicast.Key.ARROW_DOWN)
     context.session.press(tuicast.Key.ENTER)
 
@@ -96,7 +101,9 @@ def attribute(context, text, attribute):
     assert current.cell_at(pos.column, pos.row).attributes & value
 
 
-@then('the "{text}" color sample uses foreground {foreground:d} and background {background:d}')
+@then(
+    'the "{text}" color sample uses foreground {foreground:d} and background {background:d}'
+)
 def sample(context, text, foreground, background):
     current = context.session.screen()
     pos = current.find(text)
@@ -104,7 +111,9 @@ def sample(context, text, foreground, background):
     assert (cell.foreground, cell.background) == (foreground, background)
 
 
-@then('the "{label}" sample renders "{text}" at zero-based column {column:d} and row {row:d}')
+@then(
+    'the "{label}" sample renders "{text}" at zero-based column {column:d} and row {row:d}'
+)
 def unicode_sample(context, label, text, column, row):
     assert context.session.screen().find(text) == tuicast.Position(column, row)
 

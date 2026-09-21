@@ -2,9 +2,8 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from conftest import login, open_scenario
-
 import tuicast
+from conftest import login, open_scenario
 
 pytestmark = pytest.mark.reference
 
@@ -30,7 +29,9 @@ def test_form_workflow(fixture):
         session.press(tuicast.Key.TAB)
         session.press(tuicast.Key.ENTER)
         screen = session.wait_for_text("RECEIPT ACCEPTED")
-        assert screen.contains("PO-10002341 / WIDGET-42 / quantity 25 / A-01-02 / Urgent")
+        assert screen.contains(
+            "PO-10002341 / WIDGET-42 / quantity 25 / A-01-02 / Urgent"
+        )
 
 
 def test_table_workflow(fixture):
@@ -43,7 +44,9 @@ def test_table_workflow(fixture):
         session.press(tuicast.Key.END)
         session.press(tuicast.Key.ENTER)
         screen = session.wait_for(
-            tuicast.all_of(tuicast.contains("ORDER DETAILS"), tuicast.contains("Status:    HOLD"))
+            tuicast.all_of(
+                tuicast.contains("ORDER DETAILS"), tuicast.contains("Status:    HOLD")
+            )
         )
         assert screen.contains("Location:")
 
@@ -78,7 +81,9 @@ def test_terminal_event_subscription(fixture):
             session.press("b")
             assert events.get(timeout=1) == tuicast.TerminalEvent(1, "bell")
             session.press("e")
-            assert events.get(timeout=1) == tuicast.TerminalEvent(2, "enquiry", "TUICAST-ANSWER")
+            assert events.get(timeout=1) == tuicast.TerminalEvent(
+                2, "enquiry", "TUICAST-ANSWER"
+            )
         screen = session.wait_for_text('Answerback: "TUICAST-ANSWER"')
         assert screen.contains("BEL emitted: 1 / 1")
         assert screen.contains("ENQ emitted: 1 / 1")
@@ -130,7 +135,9 @@ def test_wait_diagnostics(fixture):
 
 def test_telnet_workflow():
     with tuicast.Driver.launch(os.getenv("TUICAST_DRIVER", "tuicast-driver")) as driver:
-        config = tuicast.Telnet(os.getenv("TUICAST_REFERENCE_TELNET_ADDRESS", "127.0.0.1:2323"))
+        config = tuicast.Telnet(
+            os.getenv("TUICAST_REFERENCE_TELNET_ADDRESS", "127.0.0.1:2323")
+        )
         with driver.connect(config) as connection, connection.open_session() as session:
             login(session)
             screen = open_scenario(session, 1, "RECEIVING FORM")
@@ -165,7 +172,8 @@ def test_structured_colors_attributes_and_wide_unicode(fixture):
         palette = screen.find("196")
         assert (
             bold is not None
-            and screen.cell_at(bold.column, bold.row).attributes & tuicast.Attributes.BOLD
+            and screen.cell_at(bold.column, bold.row).attributes
+            & tuicast.Attributes.BOLD
         )
         assert (
             underline is not None

@@ -54,8 +54,8 @@ Configure the matching GitHub environment with required reviewers before the
 first release.
 
 The package version in `pyproject.toml` must match a tag named
-`sdk/python/v<version>`. For example, version `0.1.0` is published by pushing
-`sdk/python/v0.1.0`. The workflow runs the complete CI suite, builds the wheel
+`sdk/python/v<version>`. For example, version `0.0.1` is published by pushing
+`sdk/python/v0.0.1`. The workflow runs the complete CI suite, builds the wheel
 and source distribution in a separate job, verifies the tag and package
 versions match, and gives OIDC permission only to the environment-protected
 publish job.

@@ -15,7 +15,7 @@ sdk install maven 3.9.9
 ```
 
 The baseline is exactly Java 21 (`--release 21`). Jackson is the sole runtime
-dependency. Coordinates are `dev.castingcode:tuicast:0.1.0-SNAPSHOT`; metadata
+dependency. Coordinates are `dev.castingcode:tuicast:0.0.1`; metadata
 is present for eventual Maven Central publication, but this project does not
 publish it.
 

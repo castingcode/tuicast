@@ -42,8 +42,10 @@ def terminal_capture_html(screen):
     view_height = screen.height * 18 + 24
     parts = [
         f"<div>Terminal {screen.width}x{screen.height} · revision {screen.revision}</div>",
-        '<svg xmlns="http://www.w3.org/2000/svg" '
-        f'viewBox="0 0 {view_width} {view_height}" style="background:#1e1e2e">',
+        (
+            '<svg xmlns="http://www.w3.org/2000/svg" '
+            f'viewBox="0 0 {view_width} {view_height}" style="background:#1e1e2e">'
+        ),
     ]
     for row in range(screen.height):
         for column in range(screen.width):
@@ -62,9 +64,13 @@ def terminal_capture_html(screen):
                     f'<rect x="{x}" y="{y}" width="{cell.width * 9}" height="18" fill="{bg}"/>'
                 )
             if cell.text.strip() and not cell.attributes & tuicast.Attributes.CONCEAL:
-                weight = "bold" if cell.attributes & tuicast.Attributes.BOLD else "normal"
+                weight = (
+                    "bold" if cell.attributes & tuicast.Attributes.BOLD else "normal"
+                )
                 decoration = (
-                    "underline" if cell.attributes & tuicast.Attributes.UNDERLINE else "none"
+                    "underline"
+                    if cell.attributes & tuicast.Attributes.UNDERLINE
+                    else "none"
                 )
                 parts.append(
                     f'<text x="{x}" y="{y + 14}" fill="{fg}" '

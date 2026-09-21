@@ -17,7 +17,9 @@ for feature in features:
         output.append(f"<h3>{html.escape(scenario['name'])}</h3><ul>")
         for step in scenario.get("steps", []):
             status = step.get("result", {}).get("status", "unknown")
-            output.append(f"<li class={status}>{html.escape(step['name'])} — {status}</li>")
+            output.append(
+                f"<li class={status}>{html.escape(step['name'])} — {status}</li>"
+            )
             for embedding in step.get("embeddings", []):
                 data = base64.b64decode(embedding["data"]).decode("utf-8", "replace")
                 output.append(

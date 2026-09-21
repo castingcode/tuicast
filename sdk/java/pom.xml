@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.castingcode</groupId>
   <artifactId>tuicast</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.0.1</version>
   <name>TUICast Java SDK</name>
   <description>Java client for the TUICast terminal automation driver</description>
   <url>https://github.com/castingcode/tuicast</url>
