@@ -1,0 +1,80 @@
+name: Publish Python SDK
+
+on:
+  push:
+    tags: ["sdk/python/v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build Python distribution
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: sdk/python/pyproject.toml
+
+      - name: Create build environment
+        shell: bash
+        run: |
+          python -m venv sdk/python/.venv
+          sdk/python/.venv/bin/python -m pip install --upgrade pip
+          sdk/python/.venv/bin/python -m pip install build
+
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#sdk/python/v}"
+          package_version="$($GITHUB_WORKSPACE/sdk/python/.venv/bin/python -c '
+          import pathlib, tomllib
+          path = pathlib.Path("sdk/python/pyproject.toml")
+          print(tomllib.loads(path.read_text())["project"]["version"])
+          ')"
+          if [[ "$tag_version" != "$package_version" ]]; then
+            echo "Tag version $tag_version does not match package version $package_version"
+            exit 1
+          fi
+
+      - name: Build wheel and source distribution
+        run: sdk/python/.venv/bin/python -m build --outdir dist sdk/python
+
+      - name: Upload Python distributions
+        uses: actions/upload-artifact@v6
+        with:
+          name: python-package-distributions
+          if-no-files-found: error
+          retention-days: 7
+          path: dist/
+
+  publish:
+    name: Publish Python distribution to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/tuicast
+    permissions:
+      id-token: write
+    steps:
+      - name: Download Python distributions
+        uses: actions/download-artifact@v7
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

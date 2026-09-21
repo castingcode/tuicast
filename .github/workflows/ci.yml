@@ -208,3 +208,311 @@ jobs:
             sdk/go/coverage-sdk.out
             sdk/go/coverage-sdk.txt
             sdk/go/coverage-sdk.html
+
+  java-sdk:
+    name: Java 21 SDK and examples
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: |
+            sdk/java/pom.xml
+            examples/java/pom.xml
+
+      - name: Set up Node.js for Cucumber reporting
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: examples/reporting/package-lock.json
+
+      - name: Verify Java SDK and install it for the examples
+        working-directory: sdk/java
+        run: mvn --batch-mode install
+
+      - name: Build integration fixtures
+        run: |
+          mkdir -p .bin
+          go build -o .bin/reference-tui ./cmd/reference-tui
+          go build -o .bin/tuicast-driver ./cmd/tuicast-driver
+
+      - name: Start reference services
+        shell: bash
+        run: |
+          .bin/reference-tui --ssh-address 127.0.0.1:2222 >reference-java-ssh.log 2>&1 &
+          echo $! > reference-java-ssh.pid
+          .bin/reference-tui --telnet-address 127.0.0.1:2323 >reference-java-telnet.log 2>&1 &
+          echo $! > reference-java-telnet.pid
+          for _ in {1..50}; do
+            if grep -q 'SSH server listening' reference-java-ssh.log && grep -q 'Telnet server listening' reference-java-telnet.log; then
+              exit 0
+            fi
+            sleep 0.1
+          done
+          cat reference-java-ssh.log reference-java-telnet.log
+          exit 1
+
+      - name: Test Java reference examples
+        working-directory: examples/java
+        env:
+          TUICAST_DRIVER: ${{ github.workspace }}/.bin/tuicast-driver
+        run: mvn --batch-mode verify
+
+      - name: Test Java Cucumber examples
+        working-directory: examples/java
+        env:
+          TUICAST_DRIVER: ${{ github.workspace }}/.bin/tuicast-driver
+        run: mvn --batch-mode test -Pcucumber
+
+      - name: Generate Java Cucumber HTML report
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p cucumber-reports/java/json cucumber-reports/java/html
+          if [[ -s examples/java/target/cucumber.json ]]; then
+            cp examples/java/target/cucumber.json cucumber-reports/java/json/cucumber.json
+            npm ci --prefix examples/reporting
+            npm --prefix examples/reporting run cucumber-report -- \
+              "$GITHUB_WORKSPACE/cucumber-reports/java/json" \
+              "$GITHUB_WORKSPACE/cucumber-reports/java/html"
+          else
+            echo "::warning::Java Cucumber JSON report was not generated"
+          fi
+
+      - name: Stop Java reference services
+        if: always()
+        shell: bash
+        run: |
+          for file in reference-java-ssh.pid reference-java-telnet.pid; do
+            if [[ -f "$file" ]]; then
+              kill "$(cat "$file")" 2>/dev/null || true
+            fi
+          done
+
+      - name: Upload Java coverage and Cucumber reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: java-sdk-reports
+          if-no-files-found: warn
+          path: |
+            sdk/java/target/site/jacoco/
+            cucumber-reports/java/
+
+  typescript-sdk:
+    name: TypeScript SDK and examples
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up Node.js 24 LTS
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: sdk/typescript/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            sdk/typescript/package-lock.json
+            examples/typescript/package-lock.json
+            examples/reporting/package-lock.json
+
+      - name: Verify TypeScript SDK
+        working-directory: sdk/typescript
+        shell: bash
+        run: |
+          npm ci
+          npm run format:check
+          npm run typecheck
+          npm run pack:check
+          npm run test:coverage | tee coverage.txt
+
+      - name: Verify TypeScript examples
+        working-directory: examples/typescript
+        run: |
+          npm ci
+          npm run format:check
+          npm run typecheck
+
+      - name: Build integration fixtures
+        run: |
+          mkdir -p .bin
+          go build -o .bin/reference-tui ./cmd/reference-tui
+          go build -o .bin/tuicast-driver ./cmd/tuicast-driver
+
+      - name: Start reference services
+        shell: bash
+        run: |
+          .bin/reference-tui --ssh-address 127.0.0.1:2222 >reference-typescript-ssh.log 2>&1 &
+          echo $! > reference-typescript-ssh.pid
+          .bin/reference-tui --telnet-address 127.0.0.1:2323 >reference-typescript-telnet.log 2>&1 &
+          echo $! > reference-typescript-telnet.pid
+          for _ in {1..50}; do
+            if grep -q 'SSH server listening' reference-typescript-ssh.log && grep -q 'Telnet server listening' reference-typescript-telnet.log; then
+              exit 0
+            fi
+            sleep 0.1
+          done
+          cat reference-typescript-ssh.log reference-typescript-telnet.log
+          exit 1
+
+      - name: Test TypeScript reference examples
+        working-directory: examples/typescript
+        env:
+          TUICAST_DRIVER: ${{ github.workspace }}/.bin/tuicast-driver
+        run: npm run reference
+
+      - name: Test TypeScript Cucumber examples
+        working-directory: examples/typescript
+        env:
+          TUICAST_DRIVER: ${{ github.workspace }}/.bin/tuicast-driver
+        run: npm run cucumber:report
+
+      - name: Generate TypeScript Cucumber HTML report
+        if: always()
+        shell: bash
+        run: |
+          if [[ -s cucumber-reports/json/typescript.json ]]; then
+            npm ci --prefix examples/reporting
+            npm --prefix examples/reporting run cucumber-report -- \
+              "$GITHUB_WORKSPACE/cucumber-reports/json" \
+              "$GITHUB_WORKSPACE/cucumber-reports/typescript-html"
+          else
+            echo "::warning::TypeScript Cucumber JSON report was not generated"
+          fi
+
+      - name: Stop TypeScript reference services
+        if: always()
+        shell: bash
+        run: |
+          for file in reference-typescript-ssh.pid reference-typescript-telnet.pid; do
+            if [[ -f "$file" ]]; then
+              kill "$(cat "$file")" 2>/dev/null || true
+            fi
+          done
+
+      - name: Upload TypeScript coverage and Cucumber reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: typescript-sdk-reports
+          if-no-files-found: warn
+          path: |
+            sdk/typescript/coverage.txt
+            cucumber-reports/
+
+  python-sdk:
+    name: Python SDK and examples
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: sdk/python/pyproject.toml
+
+      - name: Create Python virtual environment
+        shell: bash
+        run: |
+          python -m venv sdk/python/.venv
+          sdk/python/.venv/bin/python -m pip install --upgrade pip
+          sdk/python/.venv/bin/python -m pip install -e 'sdk/python[dev]'
+
+      - name: Verify Python SDK and examples
+        shell: bash
+        run: |
+          sdk/python/.venv/bin/python -m ruff format --check sdk/python examples/python
+          sdk/python/.venv/bin/python -m ruff check sdk/python examples/python
+          sdk/python/.venv/bin/python -m mypy --config-file sdk/python/pyproject.toml sdk/python/src
+          sdk/python/.venv/bin/python -m pytest -c sdk/python/pyproject.toml sdk/python/tests \
+            --cov-report=xml:sdk/python/coverage.xml \
+            --cov-report=html:sdk/python/htmlcov
+          sdk/python/.venv/bin/python -m build sdk/python
+
+      - name: Build integration fixtures
+        run: |
+          mkdir -p .bin
+          go build -o .bin/reference-tui ./cmd/reference-tui
+          go build -o .bin/tuicast-driver ./cmd/tuicast-driver
+
+      - name: Start reference services
+        shell: bash
+        run: |
+          .bin/reference-tui --ssh-address 127.0.0.1:2222 >reference-python-ssh.log 2>&1 &
+          echo $! > reference-python-ssh.pid
+          .bin/reference-tui --telnet-address 127.0.0.1:2323 >reference-python-telnet.log 2>&1 &
+          echo $! > reference-python-telnet.pid
+          for _ in {1..50}; do
+            if grep -q 'SSH server listening' reference-python-ssh.log && grep -q 'Telnet server listening' reference-python-telnet.log; then
+              exit 0
+            fi
+            sleep 0.1
+          done
+          cat reference-python-ssh.log reference-python-telnet.log
+          exit 1
+
+      - name: Test Python reference examples
+        env:
+          TUICAST_DRIVER: ${{ github.workspace }}/.bin/tuicast-driver
+        run: sdk/python/.venv/bin/python -m pytest -c sdk/python/pyproject.toml --no-cov -m reference examples/python/reference
+
+      - name: Test Python Cucumber examples and generate report
+        env:
+          TUICAST_DRIVER: ${{ github.workspace }}/.bin/tuicast-driver
+        shell: bash
+        run: |
+          mkdir -p cucumber-reports/python
+          sdk/python/.venv/bin/python examples/python/cucumber/run.py \
+            --outfile="$GITHUB_WORKSPACE/cucumber-reports/python/cucumber.json"
+          sdk/python/.venv/bin/python examples/python/cucumber/report.py \
+            "$GITHUB_WORKSPACE/cucumber-reports/python/cucumber.json" \
+            "$GITHUB_WORKSPACE/cucumber-reports/python/cucumber.html"
+
+      - name: Stop Python reference services
+        if: always()
+        shell: bash
+        run: |
+          for file in reference-python-ssh.pid reference-python-telnet.pid; do
+            if [[ -f "$file" ]]; then
+              kill "$(cat "$file")" 2>/dev/null || true
+            fi
+          done
+
+      - name: Upload Python coverage and Cucumber reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: python-sdk-reports
+          if-no-files-found: warn
+          path: |
+            sdk/python/coverage.xml
+            sdk/python/htmlcov/
+            cucumber-reports/python/

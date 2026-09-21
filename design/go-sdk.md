@@ -132,9 +132,9 @@ cell, ok := screen.CellAt(10, 4)
 
 These queries remain client-side so they cannot accidentally inspect a newer
 screen through another RPC call. Their language-neutral behavior is recorded
-in `schema/testdata/screen-queries.json` for reuse by future Java and Python
-SDKs. Timing-sensitive waits remain driver-side so every language observes the
-same terminal output and quiet-period semantics.
+in `schema/testdata/screen-queries.json` and reused by the Java, Python, and
+TypeScript SDKs. Timing-sensitive waits remain driver-side so every language
+observes the same terminal output and quiet-period semantics.
 
 ## Errors and cleanup
 

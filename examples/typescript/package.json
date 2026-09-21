@@ -1,0 +1,26 @@
+{
+  "name": "tuicast-typescript-examples",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "reference": "node --import tsx --test reference/*.test.ts",
+    "cucumber": "NODE_OPTIONS='--import tsx' cucumber-js ../../examples/features --import cucumber/steps.ts --format progress",
+    "cucumber:report": "mkdir -p ../../cucumber-reports/json && NODE_OPTIONS='--import tsx' cucumber-js ../../examples/features --import cucumber/steps.ts --format progress --format json:../../cucumber-reports/json/typescript.json"
+  },
+  "dependencies": {
+    "@castingcode/tuicast": "file:../../sdk/typescript"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^12.2.0",
+    "@types/node": "^24.7.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
