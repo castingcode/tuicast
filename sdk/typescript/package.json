@@ -3,6 +3,19 @@
   "version": "0.0.1",
   "description": "TypeScript client for the TUICast terminal automation driver",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/castingcode/tuicast.git",
+    "directory": "sdk/typescript"
+  },
+  "homepage": "https://github.com/castingcode/tuicast/tree/main/sdk/typescript",
+  "bugs": {
+    "url": "https://github.com/castingcode/tuicast/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "type": "module",
   "engines": {
     "node": ">=24"
