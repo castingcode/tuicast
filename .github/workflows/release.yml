@@ -85,6 +85,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GH_PACKAGE_MANAGER_TOKEN: ${{ secrets.GH_PACKAGE_MANAGER_TOKEN }}
+          GH_WINGET_PULL_REQUEST_TOKEN: ${{ secrets.GH_WINGET_PULL_REQUEST_TOKEN }}
 
   publish-npm-cli:
     name: Publish npm CLI installer

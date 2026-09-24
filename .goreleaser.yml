@@ -127,6 +127,7 @@ winget:
       token: "{{ .Env.GH_PACKAGE_MANAGER_TOKEN }}"
       pull_request:
         enabled: true
+        token: "{{ .Env.GH_WINGET_PULL_REQUEST_TOKEN }}"
         base:
           owner: microsoft
           name: winget-pkgs
