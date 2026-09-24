@@ -57,11 +57,34 @@ Then in your code, import the SDK as:
 import tuicast "github.com/castingcode/tuicast/sdk/go"
 ```
 
-### Driver and Other Binaries - Using the install script
+### Driver and Other Binaries (reference tui application)
+
+#### Homebrew
+
+```sh
+brew install --cask castingcode/tap/tuicast
+```
+
+#### WinGet
+
+```powershell
+winget install --exact --id CastingCode.TUICast
+```
+
+#### Scoop
+
+```powershell
+scoop bucket add castingcode https://github.com/castingcode/scoop-bucket.git
+scoop install castingcode/tuicast
+```
+
+These packages install `tuicast-driver`, `tuicast-mcp`, and `reference-tui`.
+
+#### Using the install script
 
 The default destination is ./bin. Add the selected directory to PATH if necessary.
 
-#### macOS and Linux
+##### macOS and Linux
 
 Install the driver into ./bin:
 ```
@@ -90,7 +113,7 @@ curl --proto '=https' --tlsv1.2 -LsSf \
   sh -s -- --component driver v0.0.1
 ```
 
-#### Windows PowerShell
+##### Windows PowerShell
 Install the driver:
 ```
 $install = [scriptblock]::Create((irm `
@@ -114,7 +137,7 @@ Specific version:
 & $install -Component driver -Version v0.0.1
 ```
 
-### Driver and Reference TUI - Using npm
+#### Using npm
 
 Install the driver and reference TUI globally on macOS, Linux, or Windows:
 
@@ -127,7 +150,7 @@ downloads `tuicast-driver` and `reference-tui`, and verifies their SHA-256
 checksums. This package is separate from the `@castingcode/tuicast` TypeScript
 SDK.
 
-### Driver and Other Binaries - Linux packages
+#### Linux packages
 
 Each GitHub release includes `deb`, `rpm`, and `apk` packages containing
 `tuicast-driver`, `tuicast-mcp`, and `reference-tui`. Download the package for
@@ -138,7 +161,7 @@ manager, for example:
 sudo apt install ./tuicast_VERSION_linux_amd64.deb
 ```
 
-### Driver and Other Binaries - Using Go install
+#### Using Go install
 
 Alternatively, you can use `go install` to install the binaries.
 Ensure $GOBIN or $GOPATH/bin is on PATH, as the SDK will launch the driver.
