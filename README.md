@@ -114,6 +114,30 @@ Specific version:
 & $install -Component driver -Version v0.0.1
 ```
 
+### Driver and Reference TUI - Using npm
+
+Install the driver and reference TUI globally on macOS, Linux, or Windows:
+
+```sh
+npm install --global @castingcode/tuicast-cli
+```
+
+The installer selects the release for the current operating system and CPU,
+downloads `tuicast-driver` and `reference-tui`, and verifies their SHA-256
+checksums. This package is separate from the `@castingcode/tuicast` TypeScript
+SDK.
+
+### Driver and Other Binaries - Linux packages
+
+Each GitHub release includes `deb`, `rpm`, and `apk` packages containing
+`tuicast-driver`, `tuicast-mcp`, and `reference-tui`. Download the package for
+your CPU architecture from the release and install it with the platform package
+manager, for example:
+
+```sh
+sudo apt install ./tuicast_VERSION_linux_amd64.deb
+```
+
 ### Driver and Other Binaries - Using Go install
 
 Alternatively, you can use `go install` to install the binaries.

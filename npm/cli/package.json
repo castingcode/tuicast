@@ -1,0 +1,37 @@
+{
+  "name": "@castingcode/tuicast-cli",
+  "version": "0.0.0-development",
+  "description": "Cross-platform installer for the TUICast driver and reference TUI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/castingcode/tuicast.git",
+    "directory": "npm/cli"
+  },
+  "homepage": "https://github.com/castingcode/tuicast",
+  "bugs": {
+    "url": "https://github.com/castingcode/tuicast/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "reference-tui": "bin/reference-tui.cjs",
+    "tuicast-driver": "bin/tuicast-driver.cjs"
+  },
+  "files": [
+    "bin",
+    "scripts",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install.cjs",
+    "test": "node --test test/*.test.cjs",
+    "pack:check": "npm pack --dry-run"
+  }
+}

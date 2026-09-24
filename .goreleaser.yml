@@ -1,0 +1,142 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: tuicast
+
+builds:
+  - id: driver
+    main: ./cmd/tuicast-driver
+    binary: tuicast-driver
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: [-s -w]
+
+  - id: mcp
+    main: ./cmd/tuicast-mcp
+    binary: tuicast-mcp
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+  - id: reference-tui
+    main: ./cmd/reference-tui
+    binary: reference-tui
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: [-s -w]
+
+archives:
+  - id: release
+    ids: [driver, mcp, reference-tui]
+    name_template: tuicast_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    wrap_in_directory: true
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - src: schema/mcp-profiles.schema.json
+        dst: schema/mcp-profiles.schema.json
+      - src: schema/openrpc.json
+        dst: schema/openrpc.json
+      - src: schema/workbench-recording.schema.json
+        dst: schema/workbench-recording.schema.json
+
+  # Unarchived artifacts let the npm installer download only the binaries it
+  # needs and avoid depending on platform-specific extraction tools.
+  - id: npm-binaries
+    ids: [driver, reference-tui]
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [binary]
+
+checksum:
+  name_template: checksums.txt
+
+nfpms:
+  - id: linux-packages
+    package_name: tuicast
+    ids: [driver, mcp, reference-tui]
+    vendor: CastingCode
+    homepage: https://github.com/castingcode/tuicast
+    maintainer: CastingCode <castingcode@icloud.com>
+    description: Terminal session management and automation for testing text user interfaces.
+    license: MIT
+    section: utils
+    formats: [deb, rpm, apk]
+    contents:
+      - src: schema/mcp-profiles.schema.json
+        dst: /usr/share/tuicast/schema/mcp-profiles.schema.json
+      - src: schema/openrpc.json
+        dst: /usr/share/tuicast/schema/openrpc.json
+      - src: schema/workbench-recording.schema.json
+        dst: /usr/share/tuicast/schema/workbench-recording.schema.json
+
+homebrew_casks:
+  - name: tuicast
+    ids: [release]
+    binaries: [tuicast-driver, tuicast-mcp, reference-tui]
+    homepage: https://github.com/castingcode/tuicast
+    description: Terminal session management and automation for testing text user interfaces.
+    license: MIT
+    repository:
+      owner: castingcode
+      name: homebrew-tap
+      token: "{{ .Env.GH_PACKAGE_MANAGER_TOKEN }}"
+
+scoops:
+  - name: tuicast
+    ids: [release]
+    homepage: https://github.com/castingcode/tuicast
+    description: Terminal session management and automation for testing text user interfaces.
+    license: MIT
+    repository:
+      owner: castingcode
+      name: scoop-bucket
+      token: "{{ .Env.GH_PACKAGE_MANAGER_TOKEN }}"
+
+winget:
+  - name: TUICast
+    ids: [release]
+    publisher: CastingCode
+    package_identifier: CastingCode.TUICast
+    package_name: TUICast
+    short_description: Terminal session management and automation for testing text user interfaces.
+    description: Automate concurrent SSH and Telnet terminal sessions through an embeddable Go API, language SDKs, and command-line tools.
+    homepage: https://github.com/castingcode/tuicast
+    publisher_url: https://github.com/castingcode
+    publisher_support_url: https://github.com/castingcode/tuicast/issues
+    license: MIT
+    license_url: https://github.com/castingcode/tuicast/blob/main/LICENSE
+    release_notes_url: https://github.com/castingcode/tuicast/releases/tag/{{ .Tag }}
+    tags: [automation, cli, ssh, telnet, terminal, testing, tui]
+    repository:
+      owner: castingcode
+      name: winget-pkgs
+      branch: tuicast-{{ .Version }}
+      token: "{{ .Env.GH_PACKAGE_MANAGER_TOKEN }}"
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
+
+release:
+  prerelease: auto
+  extra_files:
+    - glob: install.sh
+    - glob: install.ps1
+
+changelog:
+  use: github

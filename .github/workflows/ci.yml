@@ -62,6 +62,13 @@ jobs:
             }
           '
 
+      - name: Check release configuration
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
       - name: Verify module files
         shell: bash
         run: |
@@ -157,6 +164,13 @@ jobs:
               TUICAST_CUCUMBER_FORMAT="pretty,cucumber:$GITHUB_WORKSPACE/cucumber-reports/json/cucumber.json" \
               go test -race ./cucumber
           )
+
+      - name: Test npm CLI installer
+        working-directory: npm/cli
+        run: |
+          npm ci --ignore-scripts
+          npm test
+          npm run pack:check
 
       - name: Generate Cucumber HTML report
         if: always()

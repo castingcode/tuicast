@@ -12,81 +12,6 @@ jobs:
   checks:
     uses: ./.github/workflows/ci.yml
 
-  build:
-    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
-    needs: checks
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-            archive: tar.gz
-          - goos: linux
-            goarch: arm64
-            archive: tar.gz
-          - goos: darwin
-            goarch: amd64
-            archive: tar.gz
-          - goos: darwin
-            goarch: arm64
-            archive: tar.gz
-          - goos: windows
-            goarch: amd64
-            archive: zip
-          - goos: windows
-            goarch: arm64
-            archive: zip
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-
-      - name: Build release archive
-        shell: bash
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "0"
-          ARCHIVE: ${{ matrix.archive }}
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          name="tuicast_${version}_${GOOS}_${GOARCH}"
-          destination="dist/${name}"
-          suffix=""
-          if [[ "$GOOS" == "windows" ]]; then
-            suffix=".exe"
-          fi
-
-          mkdir -p "$destination/schema"
-          go build -trimpath -ldflags="-s -w" \
-            -o "$destination/tuicast-driver${suffix}" ./cmd/tuicast-driver
-          go build -trimpath -ldflags="-s -w -X main.version=${version}" \
-            -o "$destination/tuicast-mcp${suffix}" ./cmd/tuicast-mcp
-          go build -trimpath -ldflags="-s -w" \
-            -o "$destination/reference-tui${suffix}" ./cmd/reference-tui
-          cp LICENSE "$destination/"
-          cp schema/mcp-profiles.schema.json "$destination/schema/"
-          cp schema/openrpc.json "$destination/schema/"
-          cp schema/workbench-recording.schema.json "$destination/schema/"
-
-          if [[ "$ARCHIVE" == "zip" ]]; then
-            (cd dist && zip -qr "${name}.zip" "$name")
-          else
-            tar -C dist -czf "dist/${name}.tar.gz" "$name"
-          fi
-
-      - name: Upload release archive
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
-          if-no-files-found: error
-          path: dist/*.${{ matrix.archive }}
-
   publish-images:
     name: Publish ${{ matrix.name }} image
     needs: checks
@@ -137,41 +62,79 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
 
   release:
-    name: Create GitHub Release
-    needs: [build, publish-images]
+    name: Publish binaries and packages
+    needs: [checks, publish-images]
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@v6
-
-      - name: Download release archives
-        uses: actions/download-artifact@v7
         with:
-          pattern: release-*
-          path: dist
-          merge-multiple: true
+          fetch-depth: 0
 
-      - name: Add installers
-        run: cp install.sh install.ps1 dist/
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
 
-      - name: Generate checksums
-        working-directory: dist
-        run: sha256sum tuicast_* > checksums.txt
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_PACKAGE_MANAGER_TOKEN: ${{ secrets.GH_PACKAGE_MANAGER_TOKEN }}
 
-      - name: Create release and upload assets
+  publish-npm-cli:
+    name: Publish npm CLI installer
+    needs: release
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@castingcode/tuicast-cli
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: npm/cli
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 24 LTS
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install a trusted-publishing npm CLI
+        run: npm install --global npm@^11.5.1
+
+      - name: Set package version from release tag
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          npm version "$version" --no-git-tag-version
+
+      - name: Test package
+        run: npm test
+
+      - name: Publish package
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          prerelease=()
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
-            prerelease+=(--prerelease)
+          version="${GITHUB_REF_NAME#v}"
+          tag=latest
+          if [[ "$version" == *-* ]]; then
+            tag=next
           fi
-
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" dist/* \
-              --generate-notes "${prerelease[@]}"
+          if [[ -n "$NPM_TOKEN" ]]; then
+            export NODE_AUTH_TOKEN="$NPM_TOKEN"
           fi
+          npm publish --tag "$tag"

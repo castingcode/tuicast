@@ -2,6 +2,7 @@ notes.txt
 scratch.md
 docs/proposal-reference-tui.md
 node_modules/
+dist/
 cucumber-reports/
 .coverage
 .mypy_cache/
