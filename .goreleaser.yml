@@ -120,6 +120,7 @@ winget:
     license_url: https://github.com/castingcode/tuicast/blob/main/LICENSE
     release_notes_url: https://github.com/castingcode/tuicast/releases/tag/{{ .Tag }}
     tags: [automation, cli, ssh, telnet, terminal, testing, tui]
+    commit_msg_template: "Update: {{ .PackageIdentifier }} to {{ .Version }}"
     repository:
       owner: castingcode
       name: winget-pkgs
