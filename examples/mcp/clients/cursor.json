@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "tuicast-reference": {
+      "type": "stdio",
+      "command": "tuicast-mcp",
+      "args": [
+        "-config",
+        "${workspaceFolder}/examples/mcp/reference-profile.json"
+      ],
+      "env": {
+        "TUICAST_REFERENCE_PASSWORD": "${env:TUICAST_REFERENCE_PASSWORD}"
+      }
+    }
+  }
+}

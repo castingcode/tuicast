@@ -64,6 +64,12 @@ The reference image includes `vttest`, so every menu option is available. The
 driver image is a minimal non-root image. Mount known-hosts files into the
 driver container when using SSH's `knownHostsFile` verification option.
 
+GoReleaser and the image builds stamp each binary with the tag's version
+(without the leading `v`), the full commit SHA, and the build date through
+`-ldflags "-X main.version=... -X main.commit=... -X main.date=..."`. Every
+binary reports them with `-version` (`-v`) and lists its flags with `-help`
+(`-h`). Local `go build` binaries report `dev`.
+
 Release archives contain both `tuicast-driver` and `reference-tui`, the
 OpenRPC schema, and the project license. Archives are produced for Linux,
 macOS, and Windows on amd64 and arm64.

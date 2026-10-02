@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
@@ -60,4 +61,26 @@ func TestServerFlags(t *testing.T) {
 		So(err, ShouldNotBeNil)
 		So(err.Error(), ShouldContainSubstring, "at least one user")
 	})
+}
+
+func TestInformationFlags(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	for _, flagName := range []string{"-help", "-h"} {
+		Convey("The "+flagName+" flag prints usage and exits without serving", t, func() {
+			var output bytes.Buffer
+			So(run(context.Background(), []string{flagName}, nil, &output, logger), ShouldBeNil)
+			So(output.String(), ShouldStartWith, "Usage: reference-tui")
+			So(output.String(), ShouldContainSubstring, "-ssh-address")
+			So(output.String(), ShouldContainSubstring, "-version")
+		})
+	}
+
+	for _, flagName := range []string{"-version", "-v"} {
+		Convey("The "+flagName+" flag prints build metadata and exits without serving", t, func() {
+			var output bytes.Buffer
+			So(run(context.Background(), []string{flagName}, nil, &output, logger), ShouldBeNil)
+			So(output.String(), ShouldEqual, "reference-tui dev (commit none, built unknown)\n")
+		})
+	}
 }

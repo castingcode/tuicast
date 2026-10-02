@@ -1,0 +1,17 @@
+{
+  "profiles": {
+    "reference-ssh": {
+      "description": "Local deterministic TUICast reference application",
+      "protocol": "ssh",
+      "address": "127.0.0.1:2222",
+      "terminal": "xterm-256color",
+      "width": 80,
+      "height": 24,
+      "ssh": {
+        "username": "operator",
+        "passwordEnv": "TUICAST_REFERENCE_PASSWORD",
+        "insecureSkipHostKeyCheck": true
+      }
+    }
+  }
+}

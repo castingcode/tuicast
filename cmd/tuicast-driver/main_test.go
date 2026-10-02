@@ -78,3 +78,25 @@ func TestComposition(t *testing.T) {
 		So(err.Error(), ShouldContainSubstring, "must be a loopback address")
 	})
 }
+
+func TestInformationFlags(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	for _, flagName := range []string{"-help", "-h"} {
+		Convey("The "+flagName+" flag prints usage and exits without serving", t, func() {
+			var output bytes.Buffer
+			So(run([]string{flagName}, strings.NewReader(""), &output, logger), ShouldBeNil)
+			So(output.String(), ShouldStartWith, "Usage: tuicast-driver")
+			So(output.String(), ShouldContainSubstring, "-ui-address")
+			So(output.String(), ShouldContainSubstring, "-version")
+		})
+	}
+
+	for _, flagName := range []string{"-version", "-v"} {
+		Convey("The "+flagName+" flag prints build metadata and exits without serving", t, func() {
+			var output bytes.Buffer
+			So(run([]string{flagName}, strings.NewReader(""), &output, logger), ShouldBeNil)
+			So(output.String(), ShouldEqual, "tuicast-driver dev (commit none, built unknown)\n")
+		})
+	}
+}

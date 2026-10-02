@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/castingcode/tuicast"
@@ -21,6 +22,13 @@ import (
 	"github.com/castingcode/tuicast/xterm"
 	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
+)
+
+// Build metadata set by the release build with -ldflags "-X main.version=...".
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func main() {
@@ -36,8 +44,29 @@ func run(arguments []string, input io.Reader, output io.Writer, logger *slog.Log
 	flags.SetOutput(io.Discard)
 	uiAddress := flags.String("ui-address", "", "TUICast Inspector listen address (for example 127.0.0.1:0)")
 	workbenchEnabled := flags.Bool("workbench", false, "enable TUICast Workbench on the loopback Inspector listener")
+	var showHelp, showVersion bool
+	flags.BoolVar(&showHelp, "help", false, "show this help and exit")
+	flags.BoolVar(&showHelp, "h", false, "shorthand for -help")
+	flags.BoolVar(&showVersion, "version", false, "show version information and exit")
+	flags.BoolVar(&showVersion, "v", false, "shorthand for -version")
 	if err := flags.Parse(arguments); err != nil {
 		return fmt.Errorf("parsing TUICast driver flags: %w", err)
+	}
+	if showHelp {
+		var usage strings.Builder
+		usage.WriteString("Usage: tuicast-driver [flags]\n\nFlags:\n")
+		flags.SetOutput(&usage)
+		flags.PrintDefaults()
+		if _, err := io.WriteString(output, usage.String()); err != nil {
+			return fmt.Errorf("writing TUICast driver help: %w", err)
+		}
+		return nil
+	}
+	if showVersion {
+		if _, err := fmt.Fprintf(output, "tuicast-driver %s (commit %s, built %s)\n", version, commit, date); err != nil {
+			return fmt.Errorf("writing TUICast driver version: %w", err)
+		}
+		return nil
 	}
 	if *workbenchEnabled && *uiAddress == "" {
 		return fmt.Errorf("configuring TUICast Workbench: -ui-address is required")

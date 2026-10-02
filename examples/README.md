@@ -6,6 +6,7 @@ fixture and scenario names:
 ```text
 examples/
   features/           shared, language-neutral Cucumber features
+  mcp/                MCP client setup and agent-driven workflows
   reference/          shared SSH service and lifecycle scripts
   go/                 independent Go module using sdk/go
     cucumber/         Godog bindings for the shared features

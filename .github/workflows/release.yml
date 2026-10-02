@@ -60,6 +60,10 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.metadata.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ fromJSON(steps.metadata.outputs.json).labels['org.opencontainers.image.created'] }}
 
   release:
     name: Publish binaries and packages

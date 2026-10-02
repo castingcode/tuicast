@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -13,6 +12,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/castingcode/tuicast/reference"
@@ -20,6 +20,13 @@ import (
 	referencetelnet "github.com/castingcode/tuicast/reference/telnet"
 	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/term"
+)
+
+// Build metadata set by the release build with -ldflags "-X main.version=...".
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func main() {
@@ -41,10 +48,29 @@ func run(ctx context.Context, arguments []string, input *os.File, output io.Writ
 	sshPassword := flags.String("ssh-password", "casting", "SSH password")
 	sshUsersFile := flags.String("ssh-users-file", "", "JSON file mapping SSH usernames to passwords")
 	sshHostKey := flags.String("ssh-host-key", "", "PEM-encoded SSH host private key; generated in memory when omitted")
-	if err := flags.Parse(arguments); errors.Is(err, flag.ErrHelp) {
-		return nil
-	} else if err != nil {
+	var showHelp, showVersion bool
+	flags.BoolVar(&showHelp, "help", false, "show this help and exit")
+	flags.BoolVar(&showHelp, "h", false, "shorthand for -help")
+	flags.BoolVar(&showVersion, "version", false, "show version information and exit")
+	flags.BoolVar(&showVersion, "v", false, "shorthand for -version")
+	if err := flags.Parse(arguments); err != nil {
 		return fmt.Errorf("parsing reference TUI flags: %w", err)
+	}
+	if showHelp {
+		var usage strings.Builder
+		usage.WriteString("Usage: reference-tui [flags]\n\nFlags:\n")
+		flags.SetOutput(&usage)
+		flags.PrintDefaults()
+		if _, err := io.WriteString(output, usage.String()); err != nil {
+			return fmt.Errorf("writing reference TUI help: %w", err)
+		}
+		return nil
+	}
+	if showVersion {
+		if _, err := fmt.Fprintf(output, "reference-tui %s (commit %s, built %s)\n", version, commit, date); err != nil {
+			return fmt.Errorf("writing reference TUI version: %w", err)
+		}
+		return nil
 	}
 	if flags.NArg() != 0 {
 		return fmt.Errorf("parsing reference TUI flags: unexpected arguments: %v", flags.Args())
