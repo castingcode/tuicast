@@ -44,6 +44,25 @@ The last three commands require locally built `tuicast-driver` and
 `TUICAST_REFERENCE_TELNET_ADDRESS` to override defaults. Cucumber bindings read
 `examples/features` directly; feature files must never be copied.
 
+### Formatting and linting with ruff
+
+CI fails if any Python file or Jupyter notebook under `sdk/python` or
+`examples/python` is not ruff-formatted or has lint violations. Before
+committing Python or notebook changes, apply fixes from the repository root and
+then rerun the check commands above:
+
+```sh
+sdk/python/.venv/bin/python -m ruff format sdk/python examples/python
+sdk/python/.venv/bin/python -m ruff check --fix sdk/python examples/python
+```
+
+`ruff format` rewrites files in place, including code cells in `.ipynb`
+notebooks; it may also add cell `id` fields to notebooks, which is expected.
+Do not hand-wrap lines that ruff would join, and save notebooks from Jupyter
+before formatting so the editor does not overwrite the formatted file.
+`ruff check --fix` applies only safe automatic fixes; resolve any remaining
+reported violations manually.
+
 ## Publishing
 
 PyPI publication uses trusted publishing through
