@@ -555,7 +555,7 @@ func (s *Server) wait(data json.RawMessage) (any, *responseError) {
 	if params.StableMilliseconds < 0 {
 		return nil, invalidParams("stableMilliseconds cannot be negative")
 	}
-	matcher, err := makeMatcher(params.Matcher)
+	matcher, err := params.Matcher.ScreenMatcher()
 	if err != nil {
 		return nil, invalidParams("invalid matcher: %v", err)
 	}
@@ -786,81 +786,6 @@ func (s *Server) cancelSessionSubscriptionsLocked(sessionID uint64) {
 			subscription.cancel()
 			delete(s.subscriptions, id)
 		}
-	}
-}
-
-func makeMatcher(specification Matcher) (tuicast.ScreenMatcher, error) {
-	return makeMatcherAtDepth(specification, 0)
-}
-
-func makeMatcherAtDepth(specification Matcher, depth int) (tuicast.ScreenMatcher, error) {
-	if depth > 64 {
-		return nil, fmt.Errorf("matcher nesting exceeds 64 levels")
-	}
-	count := 0
-	if specification.Contains != nil {
-		count++
-	}
-	if specification.Line != nil {
-		count++
-	}
-	if specification.Cursor != nil {
-		count++
-	}
-	if specification.All != nil {
-		count++
-	}
-	if specification.Any != nil {
-		count++
-	}
-	if specification.Not != nil {
-		count++
-	}
-	if count != 1 {
-		return nil, fmt.Errorf("exactly one matcher expression is required")
-	}
-
-	switch {
-	case specification.Contains != nil:
-		return tuicast.ScreenContains(*specification.Contains), nil
-	case specification.Line != nil:
-		return tuicast.ScreenLineEquals(specification.Line.Row, specification.Line.Text), nil
-	case specification.Cursor != nil:
-		return tuicast.CursorAt(specification.Cursor.Column, specification.Cursor.Row), nil
-	case specification.Not != nil:
-		matcher, err := makeMatcherAtDepth(*specification.Not, depth+1)
-		if err != nil {
-			return nil, err
-		}
-		return tuicast.Not(matcher), nil
-	case specification.All != nil:
-		if len(specification.All) == 0 {
-			return nil, fmt.Errorf("all requires at least one child")
-		}
-		matchers := make([]tuicast.ScreenMatcher, len(specification.All))
-		for index, child := range specification.All {
-			matcher, err := makeMatcherAtDepth(child, depth+1)
-			if err != nil {
-				return nil, err
-			}
-			matchers[index] = matcher
-		}
-		return tuicast.AllOf(matchers...), nil
-	case specification.Any != nil:
-		if len(specification.Any) == 0 {
-			return nil, fmt.Errorf("any requires at least one child")
-		}
-		matchers := make([]tuicast.ScreenMatcher, len(specification.Any))
-		for index, child := range specification.Any {
-			matcher, err := makeMatcherAtDepth(child, depth+1)
-			if err != nil {
-				return nil, err
-			}
-			matchers[index] = matcher
-		}
-		return tuicast.AnyOf(matchers...), nil
-	default:
-		return nil, fmt.Errorf("unsupported matcher")
 	}
 }
 

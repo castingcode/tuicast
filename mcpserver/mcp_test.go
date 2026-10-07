@@ -34,7 +34,7 @@ func TestMCPProtocol(t *testing.T) {
 
 		tools, err := clientSession.ListTools(context.Background(), nil)
 		So(err, ShouldBeNil)
-		So(tools.Tools, ShouldHaveLength, 9)
+		So(tools.Tools, ShouldHaveLength, 13)
 		names := make([]string, 0, len(tools.Tools))
 		for _, tool := range tools.Tools {
 			names = append(names, tool.Name)
@@ -42,6 +42,10 @@ func TestMCPProtocol(t *testing.T) {
 		So(names, ShouldContain, "tuicast_list_profiles")
 		So(names, ShouldContain, "tuicast_connect")
 		So(names, ShouldContain, "tuicast_wait_for_text")
+		So(names, ShouldContain, "tuicast_wait")
+		So(names, ShouldContain, "tuicast_wait_for_idle")
+		So(names, ShouldContain, "tuicast_start_recording")
+		So(names, ShouldContain, "tuicast_stop_recording")
 		So(names, ShouldContain, "tuicast_close_connection")
 		for _, tool := range tools.Tools {
 			if tool.Name == "tuicast_connect" {
@@ -89,6 +93,69 @@ func TestMCPProtocol(t *testing.T) {
 		var screen mcpserver.ScreenInfo
 		decodeStructured(result, &screen)
 		So(screen.Text, ShouldStartWith, "MCP READY")
+
+		result, err = clientSession.CallTool(context.Background(), &mcp.CallToolParams{
+			Name: "tuicast_start_recording", Arguments: map[string]any{"sessionId": session.SessionID},
+		})
+		So(err, ShouldBeNil)
+		So(result.IsError, ShouldBeFalse)
+
+		result, err = clientSession.CallTool(context.Background(), &mcp.CallToolParams{
+			Name: "tuicast_type", Arguments: map[string]any{"sessionId": session.SessionID, "text": "!", "parameter": "suffix"},
+		})
+		So(err, ShouldBeNil)
+		So(result.IsError, ShouldBeFalse)
+
+		matcher := map[string]any{"all": []any{
+			map[string]any{"contains": "MCP READY!"},
+			map[string]any{"cursor": map[string]any{"column": 10, "row": 0}},
+			map[string]any{"not": map[string]any{"contains": "ERROR"}},
+		}}
+		result, err = clientSession.CallTool(context.Background(), &mcp.CallToolParams{
+			Name: "tuicast_wait", Arguments: map[string]any{
+				"sessionId": session.SessionID, "matcher": matcher, "timeoutMilliseconds": 1000, "stableMilliseconds": 10,
+			},
+		})
+		So(err, ShouldBeNil)
+		So(result.IsError, ShouldBeFalse)
+		decodeStructured(result, &screen)
+		So(screen.Cursor.Column, ShouldEqual, 10)
+
+		result, err = clientSession.CallTool(context.Background(), &mcp.CallToolParams{
+			Name: "tuicast_wait_for_idle", Arguments: map[string]any{"sessionId": session.SessionID, "quietMilliseconds": 10},
+		})
+		So(err, ShouldBeNil)
+		So(result.IsError, ShouldBeFalse)
+
+		result, err = clientSession.CallTool(context.Background(), &mcp.CallToolParams{
+			Name: "tuicast_wait", Arguments: map[string]any{
+				"sessionId": session.SessionID, "matcher": map[string]any{"contains": "A", "cursor": map[string]any{"column": 0, "row": 0}},
+			},
+		})
+		So(err, ShouldNotBeNil)
+		So(err.Error(), ShouldContainSubstring, "matcher")
+
+		result, err = clientSession.CallTool(context.Background(), &mcp.CallToolParams{
+			Name: "tuicast_stop_recording", Arguments: map[string]any{"sessionId": session.SessionID},
+		})
+		So(err, ShouldBeNil)
+		So(result.IsError, ShouldBeFalse)
+		var recording struct {
+			Version string           `json:"version"`
+			Steps   []map[string]any `json:"steps"`
+		}
+		decodeStructured(result, &recording)
+		So(recording.Version, ShouldEqual, "1")
+		So(recording.Steps, ShouldHaveLength, 3)
+		So(recording.Steps[0], ShouldResemble, map[string]any{"action": "type", "parameter": "suffix"})
+		So(recording.Steps[1]["action"], ShouldEqual, "wait")
+		recordedMatcher, err := json.Marshal(recording.Steps[1]["matcher"])
+		So(err, ShouldBeNil)
+		expectedMatcher, err := json.Marshal(matcher)
+		So(err, ShouldBeNil)
+		So(string(recordedMatcher), ShouldEqual, string(expectedMatcher))
+		So(recording.Steps[1]["stableMilliseconds"], ShouldEqual, 10)
+		So(recording.Steps[2], ShouldResemble, map[string]any{"action": "waitForIdle", "quietMilliseconds": float64(10), "timeoutMilliseconds": float64(10000)})
 
 		result, err = clientSession.CallTool(context.Background(), &mcp.CallToolParams{
 			Name: "tuicast_close_connection", Arguments: map[string]any{"connectionId": connection.ConnectionID},

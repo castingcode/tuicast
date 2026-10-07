@@ -72,14 +72,50 @@ file's directory. The authoritative format is
 | `tuicast_open_session` | Open a terminal with profile-defined settings. |
 | `tuicast_screen` | Read the current text screen and cursor. |
 | `tuicast_wait_for_text` | Wait up to 120 seconds for exact text. |
+| `tuicast_wait` | Wait for a matcher expression, optionally until stable. |
+| `tuicast_wait_for_idle` | Wait until host output has been quiet for a period. |
 | `tuicast_type` | Send literal text without logging it. |
 | `tuicast_press` | Send a named or printable key with modifiers. |
+| `tuicast_start_recording` | Start recording a session's successful operations. |
+| `tuicast_stop_recording` | Stop recording and return the workflow. |
 | `tuicast_close_session` | Idempotently clean up a session. |
 | `tuicast_close_connection` | Idempotently clean up a connection and its sessions. |
 
 Connection and session identifiers are local to one `tuicast-mcp` process.
 Closing a connection closes its sessions. The server also closes the full
 object graph when the MCP client disconnects.
+
+### Parity with the SDKs
+
+A primary use case is an agent exploring a terminal application and then
+writing TUICast tests for it. The agent should be able to verify every
+expectation it will write, so MCP waits use the same semantics as the driver:
+
+- `tuicast_wait` accepts the driver's recursive matcher expressions
+  (`contains`, `line`, `cursor`, `all`, `any`, and `not`) and an optional
+  `stableMilliseconds` quiet period, matching `session.wait`.
+- `tuicast_wait_for_idle` matches `session.waitForIdle`.
+
+Both packages decode matchers through `tuicast.MatcherSpec`, so the
+expressions cannot drift apart. Because the expressions are recursive, the
+`tuicast_wait` input schema is written by hand rather than inferred. MCP wait
+durations are capped at 120 seconds; a zero timeout uses the 10-second default.
+
+### Recordings
+
+`tuicast_start_recording` and `tuicast_stop_recording` capture a session's
+successful `type`, `press`, and wait operations as a versioned trace in the
+Workbench recording format described by
+`schema/workbench-recording.schema.json`. Screen reads and failed operations
+are not recorded, so an agent can explore freely and then record a clean run
+of the path it wants to test. Each step maps directly onto an SDK call, giving
+the agent a factual basis for generated test code. Recorded timeouts are the
+effective values, including defaults.
+
+`tuicast_type` accepts an optional `parameter` name. While recording, the
+parameter name is stored instead of the typed text, keeping passwords and other
+secrets out of the trace. A session has at most one active recording, and
+closing the session discards it.
 
 ## Dependency Choice
 

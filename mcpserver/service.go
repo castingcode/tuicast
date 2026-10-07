@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/castingcode/tuicast"
+	"github.com/castingcode/tuicast/workbench"
 )
 
 const (
@@ -89,8 +90,8 @@ type managedConnection struct {
 }
 
 type managedSession struct {
-	session      *tuicast.Session
-	connectionID uint64
+	session *tuicast.Session
+	info    SessionInfo
 }
 
 // Service owns terminal connections and sessions used by one MCP server.
@@ -102,6 +103,7 @@ type Service struct {
 	profiles    map[string]Profile
 	connections map[uint64]managedConnection
 	sessions    map[uint64]managedSession
+	recordings  map[uint64]*workbench.Recording
 	closed      bool
 	closeOnce   sync.Once
 	closeErr    error
@@ -135,6 +137,7 @@ func New(logger *slog.Logger, profiles []Profile, terminal TerminalFactory) (*Se
 		profiles:    available,
 		connections: make(map[uint64]managedConnection),
 		sessions:    make(map[uint64]managedSession),
+		recordings:  make(map[uint64]*workbench.Recording),
 	}, nil
 }
 
@@ -232,12 +235,13 @@ func (s *Service) OpenSession(ctx context.Context, connectionID uint64) (Session
 		s.mu.Unlock()
 		return SessionInfo{}, errors.Join(fmt.Errorf("opening MCP session: connection %d was closed", connectionID), session.Close())
 	}
-	s.sessions[session.ID()] = managedSession{session: session, connectionID: connectionID}
-	s.mu.Unlock()
-	return SessionInfo{
+	info := SessionInfo{
 		SessionID: session.ID(), ConnectionID: connectionID,
 		Terminal: string(managed.profile.Terminal), Width: managed.profile.Width, Height: managed.profile.Height,
-	}, nil
+	}
+	s.sessions[session.ID()] = managedSession{session: session, info: info}
+	s.mu.Unlock()
+	return info, nil
 }
 
 // Screen returns the current detached screen for a session.
@@ -254,11 +258,9 @@ func (s *Service) WaitForText(ctx context.Context, sessionID uint64, text string
 	if text == "" {
 		return ScreenInfo{}, fmt.Errorf("waiting for MCP screen text: text is required")
 	}
-	if timeout == 0 {
-		timeout = defaultWaitTimeout
-	}
-	if timeout < 0 || timeout > maximumWaitTimeout {
-		return ScreenInfo{}, fmt.Errorf("waiting for MCP screen text: timeout must be between 1ms and %s", maximumWaitTimeout)
+	timeout, err := effectiveTimeout(timeout)
+	if err != nil {
+		return ScreenInfo{}, fmt.Errorf("waiting for MCP screen text: %w", err)
 	}
 	session, err := s.findSession(sessionID)
 	if err != nil {
@@ -270,11 +272,78 @@ func (s *Service) WaitForText(ctx context.Context, sessionID uint64, text string
 	if err != nil {
 		return ScreenInfo{}, fmt.Errorf("waiting for MCP screen text in session %d: %w", sessionID, err)
 	}
+	s.record(sessionID, workbench.Step{Action: "waitForText", Text: text, TimeoutMilliseconds: timeout.Milliseconds()})
 	return screenInfo(sessionID, screen), nil
 }
 
-// Type sends literal text to a terminal session.
-func (s *Service) Type(sessionID uint64, text string) error {
+// Wait waits until matcher succeeds on a session screen. A positive stable
+// period also requires that no host output arrives for that period.
+func (s *Service) Wait(ctx context.Context, sessionID uint64, matcher tuicast.MatcherSpec, timeout, stable time.Duration) (ScreenInfo, error) {
+	screenMatcher, err := matcher.ScreenMatcher()
+	if err != nil {
+		return ScreenInfo{}, fmt.Errorf("waiting for MCP screen: invalid matcher: %w", err)
+	}
+	timeout, err = effectiveTimeout(timeout)
+	if err != nil {
+		return ScreenInfo{}, fmt.Errorf("waiting for MCP screen: %w", err)
+	}
+	if stable < 0 || stable > maximumWaitTimeout {
+		return ScreenInfo{}, fmt.Errorf("waiting for MCP screen: stable period must be between 0 and %s", maximumWaitTimeout)
+	}
+	session, err := s.findSession(sessionID)
+	if err != nil {
+		return ScreenInfo{}, err
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	var screen tuicast.Screen
+	if stable > 0 {
+		screen, err = session.WaitForStable(waitCtx, screenMatcher, stable)
+	} else {
+		screen, err = session.WaitFor(waitCtx, screenMatcher)
+	}
+	if err != nil {
+		return ScreenInfo{}, fmt.Errorf("waiting for MCP screen in session %d: %w", sessionID, err)
+	}
+	s.record(sessionID, workbench.Step{
+		Action: "wait", Matcher: &matcher,
+		TimeoutMilliseconds: timeout.Milliseconds(), StableMilliseconds: stable.Milliseconds(),
+	})
+	return screenInfo(sessionID, screen), nil
+}
+
+// WaitForIdle waits until no host output arrives for quiet.
+func (s *Service) WaitForIdle(ctx context.Context, sessionID uint64, quiet, timeout time.Duration) (ScreenInfo, error) {
+	if quiet <= 0 || quiet > maximumWaitTimeout {
+		return ScreenInfo{}, fmt.Errorf("waiting for idle MCP session: quiet period must be between 1ms and %s", maximumWaitTimeout)
+	}
+	timeout, err := effectiveTimeout(timeout)
+	if err != nil {
+		return ScreenInfo{}, fmt.Errorf("waiting for idle MCP session: %w", err)
+	}
+	session, err := s.findSession(sessionID)
+	if err != nil {
+		return ScreenInfo{}, err
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	screen, err := session.WaitForIdle(waitCtx, quiet)
+	if err != nil {
+		return ScreenInfo{}, fmt.Errorf("waiting for idle MCP session %d: %w", sessionID, err)
+	}
+	s.record(sessionID, workbench.Step{
+		Action: "waitForIdle", QuietMilliseconds: quiet.Milliseconds(), TimeoutMilliseconds: timeout.Milliseconds(),
+	})
+	return screenInfo(sessionID, screen), nil
+}
+
+// Type sends literal text to a terminal session. When the session is
+// recording, a non-empty parameter is recorded in place of text.
+func (s *Service) Type(sessionID uint64, text, parameter string) error {
+	step, err := workbench.TypeStep(text, parameter)
+	if err != nil {
+		return fmt.Errorf("typing in MCP session: %w", err)
+	}
 	session, err := s.findSession(sessionID)
 	if err != nil {
 		return err
@@ -282,6 +351,7 @@ func (s *Service) Type(sessionID uint64, text string) error {
 	if err := session.Send([]byte(text)); err != nil {
 		return fmt.Errorf("typing in MCP session %d: %w", sessionID, err)
 	}
+	s.record(sessionID, step)
 	return nil
 }
 
@@ -297,7 +367,60 @@ func (s *Service) Press(sessionID uint64, key tuicast.Key, modifiers ...tuicast.
 	if err := session.Press(key, modifiers...); err != nil {
 		return fmt.Errorf("pressing key in MCP session %d: %w", sessionID, err)
 	}
+	s.record(sessionID, workbench.PressStep(key, modifiers...))
 	return nil
+}
+
+// StartRecording begins recording successful input and wait operations on a
+// session. A session may have only one active recording.
+func (s *Service) StartRecording(sessionID uint64) (workbench.Recording, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return workbench.Recording{}, fmt.Errorf("starting MCP recording: service is closed")
+	}
+	managed, ok := s.sessions[sessionID]
+	if !ok {
+		return workbench.Recording{}, fmt.Errorf("starting MCP recording: unknown session %d", sessionID)
+	}
+	if s.recordings[sessionID] != nil {
+		return workbench.Recording{}, fmt.Errorf("starting MCP recording: session %d is already recording", sessionID)
+	}
+	recording := &workbench.Recording{
+		Version: workbench.RecordingVersion,
+		Session: workbench.Session{
+			ID: sessionID, Terminal: managed.info.Terminal, Width: managed.info.Width, Height: managed.info.Height,
+		},
+		Steps: []workbench.Step{},
+	}
+	s.recordings[sessionID] = recording
+	return *recording, nil
+}
+
+// StopRecording ends a session's recording and returns its trace.
+func (s *Service) StopRecording(sessionID uint64) (workbench.Recording, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return workbench.Recording{}, fmt.Errorf("stopping MCP recording: service is closed")
+	}
+	if _, ok := s.sessions[sessionID]; !ok {
+		return workbench.Recording{}, fmt.Errorf("stopping MCP recording: unknown session %d", sessionID)
+	}
+	recording := s.recordings[sessionID]
+	if recording == nil {
+		return workbench.Recording{}, fmt.Errorf("stopping MCP recording: session %d is not recording", sessionID)
+	}
+	delete(s.recordings, sessionID)
+	return *recording, nil
+}
+
+func (s *Service) record(sessionID uint64, step workbench.Step) {
+	s.mu.Lock()
+	if recording := s.recordings[sessionID]; recording != nil {
+		recording.Steps = append(recording.Steps, step)
+	}
+	s.mu.Unlock()
 }
 
 // CloseSession closes a session. Repeated cleanup succeeds with Closed false.
@@ -306,6 +429,7 @@ func (s *Service) CloseSession(sessionID uint64) (CloseInfo, error) {
 	managed, ok := s.sessions[sessionID]
 	if ok {
 		delete(s.sessions, sessionID)
+		delete(s.recordings, sessionID)
 	}
 	s.mu.Unlock()
 	if !ok {
@@ -324,8 +448,9 @@ func (s *Service) CloseConnection(connectionID uint64) (CloseInfo, error) {
 	if ok {
 		delete(s.connections, connectionID)
 		for sessionID, session := range s.sessions {
-			if session.connectionID == connectionID {
+			if session.info.ConnectionID == connectionID {
 				delete(s.sessions, sessionID)
+				delete(s.recordings, sessionID)
 			}
 		}
 	}
@@ -346,6 +471,7 @@ func (s *Service) Close() error {
 		s.closed = true
 		s.sessions = make(map[uint64]managedSession)
 		s.connections = make(map[uint64]managedConnection)
+		s.recordings = make(map[uint64]*workbench.Recording)
 		s.mu.Unlock()
 		if err := s.server.Close(); err != nil {
 			s.closeErr = fmt.Errorf("closing MCP service: %w", err)
@@ -366,6 +492,18 @@ func (s *Service) findSession(sessionID uint64) (*tuicast.Session, error) {
 		return nil, fmt.Errorf("accessing MCP session: unknown session %d", sessionID)
 	}
 	return managed.session, nil
+}
+
+// effectiveTimeout applies the default to a zero timeout and enforces the
+// maximum.
+func effectiveTimeout(timeout time.Duration) (time.Duration, error) {
+	if timeout == 0 {
+		return defaultWaitTimeout, nil
+	}
+	if timeout < time.Millisecond || timeout > maximumWaitTimeout {
+		return 0, fmt.Errorf("timeout must be between 1ms and %s", maximumWaitTimeout)
+	}
+	return timeout, nil
 }
 
 func screenInfo(sessionID uint64, screen tuicast.Screen) ScreenInfo {

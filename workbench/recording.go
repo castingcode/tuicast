@@ -11,7 +11,8 @@ import (
 	"github.com/castingcode/tuicast"
 )
 
-const recordingVersion = "1"
+// RecordingVersion is the version of the recording format produced by this package.
+const RecordingVersion = "1"
 
 // SessionControl is the exclusive terminal capability consumed by Workbench.
 type SessionControl interface {
@@ -40,14 +41,39 @@ type Recording struct {
 	Steps   []Step  `json:"steps"`
 }
 
-// Step is one replayable Workbench operation.
+// Step is one recorded terminal operation. Workbench records waitForText,
+// type, and press steps; MCP recordings may also contain wait and waitForIdle
+// steps.
 type Step struct {
-	Action              string   `json:"action"`
-	Text                string   `json:"text,omitempty"`
-	Parameter           string   `json:"parameter,omitempty"`
-	Key                 string   `json:"key,omitempty"`
-	Modifiers           []string `json:"modifiers,omitempty"`
-	TimeoutMilliseconds int64    `json:"timeoutMilliseconds,omitempty"`
+	Action              string               `json:"action"`
+	Text                string               `json:"text,omitempty"`
+	Parameter           string               `json:"parameter,omitempty"`
+	Key                 string               `json:"key,omitempty"`
+	Modifiers           []string             `json:"modifiers,omitempty"`
+	Matcher             *tuicast.MatcherSpec `json:"matcher,omitempty"`
+	TimeoutMilliseconds int64                `json:"timeoutMilliseconds,omitempty"`
+	StableMilliseconds  int64                `json:"stableMilliseconds,omitempty"`
+	QuietMilliseconds   int64                `json:"quietMilliseconds,omitempty"`
+}
+
+// TypeStep returns a type step for text. A non-empty parameter is recorded in
+// place of text so secrets do not enter the trace.
+func TypeStep(text, parameter string) (Step, error) {
+	if text == "" {
+		return Step{}, fmt.Errorf("recording type step: text is required")
+	}
+	if parameter == "" {
+		return Step{Action: "type", Text: text}, nil
+	}
+	if !validParameter(parameter) {
+		return Step{}, fmt.Errorf("recording type step: parameter must contain only letters, digits, underscores, or hyphens")
+	}
+	return Step{Action: "type", Parameter: parameter}, nil
+}
+
+// PressStep returns a press step using canonical, de-duplicated modifier names.
+func PressStep(key tuicast.Key, modifiers ...tuicast.KeyModifier) Step {
+	return Step{Action: "press", Key: string(key), Modifiers: modifierNames(modifiers)}
 }
 
 // Manager owns active recordings and retained traces.
@@ -101,7 +127,7 @@ func (m *Manager) Start(session Session) (Recording, error) {
 	}
 	state.active = true
 	state.control = control
-	state.recording = Recording{Version: recordingVersion, Session: session, Steps: []Step{}}
+	state.recording = Recording{Version: RecordingVersion, Session: session, Steps: []Step{}}
 	recording := copyRecording(state.recording)
 	state.mu.Unlock()
 	return recording, nil
@@ -110,11 +136,9 @@ func (m *Manager) Start(session Session) (Recording, error) {
 // Type sends text and appends a type step. parameter records a placeholder
 // instead of the supplied value so secrets do not enter the trace.
 func (m *Manager) Type(sessionID uint64, text, parameter string) (Recording, error) {
-	if text == "" {
-		return Recording{}, fmt.Errorf("typing in Workbench: text is required")
-	}
-	if parameter != "" && !validParameter(parameter) {
-		return Recording{}, fmt.Errorf("typing in Workbench: parameter must contain only letters, digits, underscores, or hyphens")
+	step, err := TypeStep(text, parameter)
+	if err != nil {
+		return Recording{}, fmt.Errorf("typing in Workbench: %w", err)
 	}
 	state, err := m.activeState(sessionID)
 	if err != nil {
@@ -128,7 +152,7 @@ func (m *Manager) Type(sessionID uint64, text, parameter string) (Recording, err
 	if err := state.control.Send([]byte(text)); err != nil {
 		return Recording{}, fmt.Errorf("typing in Workbench: %w", err)
 	}
-	state.recording.Steps = append(state.recording.Steps, Step{Action: "type", Text: recordedText(text, parameter), Parameter: parameter})
+	state.recording.Steps = append(state.recording.Steps, step)
 	return copyRecording(state.recording), nil
 }
 
@@ -146,7 +170,7 @@ func (m *Manager) Press(sessionID uint64, key tuicast.Key, modifiers ...tuicast.
 	if err := state.control.Press(key, modifiers...); err != nil {
 		return Recording{}, fmt.Errorf("pressing key in Workbench: %w", err)
 	}
-	state.recording.Steps = append(state.recording.Steps, Step{Action: "press", Key: string(key), Modifiers: modifierNames(modifiers)})
+	state.recording.Steps = append(state.recording.Steps, PressStep(key, modifiers...))
 	return copyRecording(state.recording), nil
 }
 
@@ -309,13 +333,6 @@ func copyRecording(recording Recording) Recording {
 		result.Steps[index].Modifiers = append([]string(nil), step.Modifiers...)
 	}
 	return result
-}
-
-func recordedText(text, parameter string) string {
-	if parameter != "" {
-		return ""
-	}
-	return text
 }
 
 func validParameter(value string) bool {

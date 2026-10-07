@@ -101,24 +101,13 @@ type ConnectionOptions struct {
 
 // Matcher describes a serializable screen expectation. Exactly one field must
 // be set.
-type Matcher struct {
-	Contains *string        `json:"contains,omitempty"`
-	Line     *LineMatcher   `json:"line,omitempty"`
-	Cursor   *CursorMatcher `json:"cursor,omitempty"`
-	All      []Matcher      `json:"all,omitempty"`
-	Any      []Matcher      `json:"any,omitempty"`
-	Not      *Matcher       `json:"not,omitempty"`
-}
+type Matcher = tuicast.MatcherSpec
 
-type LineMatcher struct {
-	Row  int    `json:"row"`
-	Text string `json:"text"`
-}
+// LineMatcher describes an exact screen-row expectation.
+type LineMatcher = tuicast.LineMatcherSpec
 
-type CursorMatcher struct {
-	Column int `json:"column"`
-	Row    int `json:"row"`
-}
+// CursorMatcher describes an expected cursor position.
+type CursorMatcher = tuicast.CursorMatcherSpec
 
 type screenResult struct {
 	Width    int          `json:"width"`

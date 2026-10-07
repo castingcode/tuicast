@@ -121,3 +121,90 @@ func matcherDescription(matcher ScreenMatcher) string {
 	}
 	return "custom screen matcher"
 }
+
+// MatcherSpec is a serializable screen expectation used by the driver
+// protocol, MCP tools, and recorded workflows. Exactly one field must be set.
+type MatcherSpec struct {
+	Contains *string            `json:"contains,omitempty"`
+	Line     *LineMatcherSpec   `json:"line,omitempty"`
+	Cursor   *CursorMatcherSpec `json:"cursor,omitempty"`
+	All      []MatcherSpec      `json:"all,omitempty"`
+	Any      []MatcherSpec      `json:"any,omitempty"`
+	Not      *MatcherSpec       `json:"not,omitempty"`
+}
+
+// LineMatcherSpec describes ScreenLineEquals.
+type LineMatcherSpec struct {
+	Row  int    `json:"row"`
+	Text string `json:"text"`
+}
+
+// CursorMatcherSpec describes CursorAt.
+type CursorMatcherSpec struct {
+	Column int `json:"column"`
+	Row    int `json:"row"`
+}
+
+const maximumMatcherSpecDepth = 64
+
+// ScreenMatcher builds the matcher described by s.
+func (s MatcherSpec) ScreenMatcher() (ScreenMatcher, error) {
+	return s.screenMatcherAtDepth(0)
+}
+
+func (s MatcherSpec) screenMatcherAtDepth(depth int) (ScreenMatcher, error) {
+	if depth > maximumMatcherSpecDepth {
+		return nil, fmt.Errorf("matcher nesting exceeds %d levels", maximumMatcherSpecDepth)
+	}
+	count := 0
+	for _, set := range []bool{s.Contains != nil, s.Line != nil, s.Cursor != nil, s.All != nil, s.Any != nil, s.Not != nil} {
+		if set {
+			count++
+		}
+	}
+	if count != 1 {
+		return nil, fmt.Errorf("exactly one matcher expression is required")
+	}
+
+	switch {
+	case s.Contains != nil:
+		return ScreenContains(*s.Contains), nil
+	case s.Line != nil:
+		return ScreenLineEquals(s.Line.Row, s.Line.Text), nil
+	case s.Cursor != nil:
+		return CursorAt(s.Cursor.Column, s.Cursor.Row), nil
+	case s.Not != nil:
+		matcher, err := s.Not.screenMatcherAtDepth(depth + 1)
+		if err != nil {
+			return nil, err
+		}
+		return Not(matcher), nil
+	case s.All != nil:
+		matchers, err := childScreenMatchers("all", s.All, depth)
+		if err != nil {
+			return nil, err
+		}
+		return AllOf(matchers...), nil
+	default:
+		matchers, err := childScreenMatchers("any", s.Any, depth)
+		if err != nil {
+			return nil, err
+		}
+		return AnyOf(matchers...), nil
+	}
+}
+
+func childScreenMatchers(name string, specs []MatcherSpec, depth int) ([]ScreenMatcher, error) {
+	if len(specs) == 0 {
+		return nil, fmt.Errorf("%s requires at least one child", name)
+	}
+	matchers := make([]ScreenMatcher, len(specs))
+	for index, child := range specs {
+		matcher, err := child.screenMatcherAtDepth(depth + 1)
+		if err != nil {
+			return nil, err
+		}
+		matchers[index] = matcher
+	}
+	return matchers, nil
+}

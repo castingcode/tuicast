@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ func NewMCPServer(service *Service, version string) (*mcp.Server, error) {
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: boolPointer(false)}
 	changesTerminal := &mcp.ToolAnnotations{DestructiveHint: boolPointer(false), OpenWorldHint: boolPointer(true)}
 	cleanup := &mcp.ToolAnnotations{DestructiveHint: boolPointer(false), IdempotentHint: true, OpenWorldHint: boolPointer(true)}
+	recordingControl := &mcp.ToolAnnotations{DestructiveHint: boolPointer(false), OpenWorldHint: boolPointer(false)}
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "tuicast_list_profiles", Description: "List operator-approved terminal connection profiles. Credentials and endpoint addresses are never returned.", Annotations: readOnly,
@@ -47,7 +49,7 @@ func NewMCPServer(service *Service, version string) (*mcp.Server, error) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "tuicast_wait_for_text", Description: "Wait until exact case-sensitive text appears anywhere on a terminal screen.", Annotations: readOnly,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input waitForTextInput) (*mcp.CallToolResult, ScreenInfo, error) {
-		timeout, err := waitTimeout(input.TimeoutMilliseconds)
+		timeout, err := boundedMilliseconds("timeoutMilliseconds", input.TimeoutMilliseconds)
 		if err != nil {
 			return nil, ScreenInfo{}, err
 		}
@@ -55,9 +57,43 @@ func NewMCPServer(service *Service, version string) (*mcp.Server, error) {
 		return nil, result, err
 	})
 	mcp.AddTool(server, &mcp.Tool{
-		Name: "tuicast_type", Description: "Type literal text into an interactive terminal session. The text is sent exactly and is not logged by TUICast.", Annotations: changesTerminal,
+		Name: "tuicast_wait",
+		Description: "Wait until a terminal screen matches a matcher expression. These are the same expressions accepted by the TUICast SDKs and driver: " +
+			`{"contains": "text"} for exact case-sensitive text anywhere; {"line": {"row": 0, "text": "..."}} for an exact zero-based row including trailing spaces; ` +
+			`{"cursor": {"column": 0, "row": 0}} for a zero-based cursor position; {"all": [...]}, {"any": [...]}, and {"not": {...}} to combine them. ` +
+			"A positive stableMilliseconds additionally requires that no host output arrives for that period after the screen matches.",
+		Annotations: readOnly,
+		InputSchema: json.RawMessage(waitInputSchema),
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input waitInput) (*mcp.CallToolResult, ScreenInfo, error) {
+		timeout, err := boundedMilliseconds("timeoutMilliseconds", input.TimeoutMilliseconds)
+		if err != nil {
+			return nil, ScreenInfo{}, err
+		}
+		stable, err := boundedMilliseconds("stableMilliseconds", input.StableMilliseconds)
+		if err != nil {
+			return nil, ScreenInfo{}, err
+		}
+		result, err := service.Wait(ctx, input.SessionID, input.Matcher, timeout, stable)
+		return nil, result, err
+	})
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "tuicast_wait_for_idle", Description: "Wait until the host has sent no output for quietMilliseconds, then return the screen. Output that does not visibly change the screen still resets the quiet period.", Annotations: readOnly,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input waitForIdleInput) (*mcp.CallToolResult, ScreenInfo, error) {
+		quiet, err := boundedMilliseconds("quietMilliseconds", input.QuietMilliseconds)
+		if err != nil {
+			return nil, ScreenInfo{}, err
+		}
+		timeout, err := boundedMilliseconds("timeoutMilliseconds", input.TimeoutMilliseconds)
+		if err != nil {
+			return nil, ScreenInfo{}, err
+		}
+		result, err := service.WaitForIdle(ctx, input.SessionID, quiet, timeout)
+		return nil, result, err
+	})
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "tuicast_type", Description: "Type literal text into an interactive terminal session. The text is sent exactly and is not logged by TUICast. While recording, set parameter for passwords and other secrets so the recording stores the parameter name instead of the text.", Annotations: changesTerminal,
 	}, func(_ context.Context, _ *mcp.CallToolRequest, input typeInput) (*mcp.CallToolResult, actionOutput, error) {
-		err := service.Type(input.SessionID, input.Text)
+		err := service.Type(input.SessionID, input.Text, input.Parameter)
 		return nil, actionOutput{Sent: err == nil}, err
 	})
 	mcp.AddTool(server, &mcp.Tool{
@@ -68,6 +104,21 @@ func NewMCPServer(service *Service, version string) (*mcp.Server, error) {
 			err = service.Press(input.SessionID, tuicast.Key(input.Key), modifiers...)
 		}
 		return nil, actionOutput{Sent: err == nil}, err
+	})
+	// Recording outputs contain recursive matcher expressions, which the SDK
+	// cannot infer a schema for; schema/workbench-recording.schema.json
+	// documents their format.
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "tuicast_start_recording", Description: "Start recording a session's successful type, press, and wait operations as a replayable TUICast workflow. Screen reads and failed operations are not recorded. Use this once you know the path you want to capture, then repeat it from a known screen.", Annotations: recordingControl,
+	}, func(_ context.Context, _ *mcp.CallToolRequest, input sessionInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.StartRecording(input.SessionID)
+		return nil, result, err
+	})
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "tuicast_stop_recording", Description: "Stop recording a session and return the recorded workflow: versioned JSON with session metadata and ordered steps that map directly onto TUICast SDK calls. Stop before closing the session; closing discards an active recording.", Annotations: recordingControl,
+	}, func(_ context.Context, _ *mcp.CallToolRequest, input sessionInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.StopRecording(input.SessionID)
+		return nil, result, err
 	})
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "tuicast_close_session", Description: "Close a TUICast terminal session. Safe to repeat during cleanup.", Annotations: cleanup,
@@ -106,9 +157,56 @@ type waitForTextInput struct {
 	TimeoutMilliseconds int    `json:"timeoutMilliseconds,omitempty" jsonschema:"timeout in milliseconds; defaults to 10000 and cannot exceed 120000"`
 }
 
+type waitInput struct {
+	SessionID           uint64              `json:"sessionId"`
+	Matcher             tuicast.MatcherSpec `json:"matcher"`
+	TimeoutMilliseconds int                 `json:"timeoutMilliseconds,omitempty"`
+	StableMilliseconds  int                 `json:"stableMilliseconds,omitempty"`
+}
+
+// waitInputSchema is written by hand because matcher expressions are
+// recursive. It mirrors the Matcher schema in schema/openrpc.json.
+const waitInputSchema = `{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sessionId", "matcher"],
+  "properties": {
+    "sessionId": {"type": "integer", "minimum": 1, "description": "TUICast session identifier"},
+    "matcher": {"$ref": "#/$defs/matcher"},
+    "timeoutMilliseconds": {"type": "integer", "minimum": 0, "maximum": 120000, "description": "timeout in milliseconds; defaults to 10000 and cannot exceed 120000"},
+    "stableMilliseconds": {"type": "integer", "minimum": 0, "maximum": 120000, "description": "optional period without host output required after the screen matches"}
+  },
+  "$defs": {
+    "matcher": {
+      "description": "Exactly one matcher expression. Rows and columns are zero-based.",
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["contains"], "properties": {"contains": {"type": "string"}}},
+        {"type": "object", "additionalProperties": false, "required": ["line"], "properties": {"line": {
+          "type": "object", "additionalProperties": false, "required": ["row", "text"],
+          "properties": {"row": {"type": "integer", "minimum": 0}, "text": {"type": "string"}}
+        }}},
+        {"type": "object", "additionalProperties": false, "required": ["cursor"], "properties": {"cursor": {
+          "type": "object", "additionalProperties": false, "required": ["column", "row"],
+          "properties": {"column": {"type": "integer", "minimum": 0}, "row": {"type": "integer", "minimum": 0}}
+        }}},
+        {"type": "object", "additionalProperties": false, "required": ["all"], "properties": {"all": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/matcher"}}}},
+        {"type": "object", "additionalProperties": false, "required": ["any"], "properties": {"any": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/matcher"}}}},
+        {"type": "object", "additionalProperties": false, "required": ["not"], "properties": {"not": {"$ref": "#/$defs/matcher"}}}
+      ]
+    }
+  }
+}`
+
+type waitForIdleInput struct {
+	SessionID           uint64 `json:"sessionId" jsonschema:"TUICast session identifier"`
+	QuietMilliseconds   int    `json:"quietMilliseconds" jsonschema:"required period without host output, in milliseconds; cannot exceed 120000"`
+	TimeoutMilliseconds int    `json:"timeoutMilliseconds,omitempty" jsonschema:"timeout in milliseconds; defaults to 10000 and cannot exceed 120000"`
+}
+
 type typeInput struct {
 	SessionID uint64 `json:"sessionId" jsonschema:"TUICast session identifier"`
 	Text      string `json:"text" jsonschema:"literal text to send exactly as provided"`
+	Parameter string `json:"parameter,omitempty" jsonschema:"optional name recorded instead of the text while recording, such as password; letters, digits, underscores, and hyphens only"`
 }
 
 type pressInput struct {
@@ -138,9 +236,9 @@ func parseModifiers(names []string) ([]tuicast.KeyModifier, error) {
 	return modifiers, nil
 }
 
-func waitTimeout(milliseconds int) (time.Duration, error) {
+func boundedMilliseconds(name string, milliseconds int) (time.Duration, error) {
 	if milliseconds < 0 || milliseconds > int(maximumWaitTimeout/time.Millisecond) {
-		return 0, fmt.Errorf("parsing MCP wait timeout: timeoutMilliseconds must be between 0 and %d", maximumWaitTimeout/time.Millisecond)
+		return 0, fmt.Errorf("parsing MCP wait duration: %s must be between 0 and %d", name, maximumWaitTimeout/time.Millisecond)
 	}
 	return time.Duration(milliseconds) * time.Millisecond, nil
 }

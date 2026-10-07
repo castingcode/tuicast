@@ -82,6 +82,10 @@ Paste one of these prompts into the editor's agent mode:
   a realistic warehouse receiving form.
 - [`prompts/function-keys.md`](prompts/function-keys.md) — send a named function
   key and a modified character.
+- [`prompts/write-test.md`](prompts/write-test.md) — explore a workflow, record
+  a clean run, and turn the recording into a test using one of the TUICast
+  SDKs. Run it from a checkout or workspace that contains the SDK's getting
+  started guide.
 
 Approve the TUICast tool calls when requested. The prompts require explicit
 session and connection cleanup. As a final safeguard, `tuicast-mcp` also closes
@@ -90,7 +94,8 @@ its complete object graph when the MCP client disconnects.
 ## What the example demonstrates
 
 The agent can list approved profile metadata, connect, open a session, inspect
-the current screen, wait for exact text, type, press keys, and close resources.
+the current screen, wait for text, matcher expressions, or idle output, type,
+press keys, record a replayable workflow, and close resources.
 It cannot supply an arbitrary hostname, port, username, credential, terminal
 profile, or screen size. Those values remain in
 [`reference-profile.json`](reference-profile.json), outside the model's tool

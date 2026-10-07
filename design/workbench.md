@@ -37,6 +37,10 @@ out of downloaded traces.
 
 Recordings use versioned JSON described by
 [`schema/workbench-recording.schema.json`](../schema/workbench-recording.schema.json).
+The TUICast MCP server produces the same format. Its recordings may also
+contain `wait` steps, which use the driver's matcher expressions, and
+`waitForIdle` steps; Workbench replay supports only the steps Workbench
+records.
 Replay acquires exclusive control, executes steps in order, and requires values
 for every parameterized input. The first version replays against the original
 session; connection setup and cross-session replay belong in a later increment.

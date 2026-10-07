@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://castingcode.github.io/tuicast/schema/workbench-recording.schema.json",
   "title": "TUICast Workbench Recording",
+  "description": "A replayable terminal workflow recorded by TUICast Workbench or the TUICast MCP server. Workbench records waitForText, type, and press steps; MCP recordings may also contain wait and waitForIdle steps.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "session", "steps"],
@@ -35,6 +36,27 @@
           {
             "type": "object",
             "additionalProperties": false,
+            "required": ["action", "matcher", "timeoutMilliseconds"],
+            "properties": {
+              "action": { "const": "wait" },
+              "matcher": { "$ref": "#/$defs/matcher" },
+              "timeoutMilliseconds": { "type": "integer", "minimum": 1 },
+              "stableMilliseconds": { "type": "integer", "minimum": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action", "quietMilliseconds", "timeoutMilliseconds"],
+            "properties": {
+              "action": { "const": "waitForIdle" },
+              "quietMilliseconds": { "type": "integer", "minimum": 1 },
+              "timeoutMilliseconds": { "type": "integer", "minimum": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
             "required": ["action"],
             "properties": {
               "action": { "const": "type" },
@@ -62,6 +84,69 @@
           }
         ]
       }
+    }
+  },
+  "$defs": {
+    "matcher": {
+      "description": "Exactly one matcher expression, as accepted by session.wait in openrpc.json. Rows and columns are zero-based.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contains"],
+          "properties": { "contains": { "type": "string" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["line"],
+          "properties": {
+            "line": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["row", "text"],
+              "properties": {
+                "row": { "type": "integer", "minimum": 0 },
+                "text": { "type": "string" }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cursor"],
+          "properties": {
+            "cursor": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["column", "row"],
+              "properties": {
+                "column": { "type": "integer", "minimum": 0 },
+                "row": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["all"],
+          "properties": { "all": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/matcher" } } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["any"],
+          "properties": { "any": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/matcher" } } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["not"],
+          "properties": { "not": { "$ref": "#/$defs/matcher" } }
+        }
+      ]
     }
   }
 }
