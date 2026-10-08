@@ -19,3 +19,7 @@ sdk/typescript/coverage/
 sdk/typescript/dist/
 sdk/typescript/*.tgz
 target/
+
+# Local environment files hold passwords and are never committed.
+.env.local
+.env.*.local

@@ -21,7 +21,7 @@ func TestApplication(t *testing.T) {
 		view := application.View().Content
 
 		So(view, ShouldContainSubstring, "LOGIN / AUTHENTICATION")
-		So(view, ShouldContainSubstring, "operator / casting")
+		So(view, ShouldContainSubstring, "operator / test-password")
 		So(view, ShouldContainSubstring, "────────")
 		So(application.loginInputs[0].Placeholder, ShouldBeEmpty)
 		So(application.loginInputs[1].Placeholder, ShouldBeEmpty)
@@ -42,7 +42,7 @@ func TestApplication(t *testing.T) {
 		application.loginInputs[0].SetValue("")
 		application.Update(runes("operator"))
 		application.Update(key(tea.KeyTab))
-		application.Update(runes("casting"))
+		application.Update(runes("test-password"))
 		application.Update(key(tea.KeyF1))
 
 		So(application.page, ShouldEqual, pageMenu)
@@ -53,7 +53,7 @@ func TestApplication(t *testing.T) {
 		application := newApplication()
 		application.Update(tea.PasteMsg{Content: "operator"})
 		application.Update(key(tea.KeyTab))
-		application.Update(tea.PasteMsg{Content: "casting"})
+		application.Update(tea.PasteMsg{Content: "test-password"})
 		application.Update(key(tea.KeyF1))
 		So(application.page, ShouldEqual, pageMenu)
 
@@ -527,16 +527,18 @@ func (r *recordingVTTestRunner) Run(_ io.Reader, output io.Writer) error {
 	return r.err
 }
 
+var testCredentials = Credentials{Username: "operator", Password: "test-password"}
+
 func newApplication() *Application {
-	application, err := New(80, 24)
+	application, err := New(80, 24, testCredentials)
 	So(err, ShouldBeNil)
 	return application
 }
 
 func authenticatedApplication() *Application {
 	application := newApplication()
-	application.loginInputs[0].SetValue(loginUser)
-	application.loginInputs[1].SetValue(loginPassword)
+	application.loginInputs[0].SetValue(testCredentials.Username)
+	application.loginInputs[1].SetValue(testCredentials.Password)
 	application.authenticate()
 	So(application.page, ShouldEqual, pageMenu)
 	return application

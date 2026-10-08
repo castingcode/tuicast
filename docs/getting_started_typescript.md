@@ -37,19 +37,38 @@ npm install --save-dev @types/node typescript
 Node.js 24 can run erasable TypeScript directly, so this example does not need
 an additional TypeScript runner.
 
-## Start the reference TUI
+## Choose credentials
 
-In a separate terminal, start TUICast's deterministic demonstration server:
+The reference TUI has no default passwords, so choose your own and keep them
+out of source code, just as you would for a real WMS environment. Store them in
+a `.env.local` file that is excluded from version control:
 
 ```sh
-reference-tui \
-  --ssh-address 127.0.0.1:2222 \
-  --ssh-username demo \
-  --ssh-password demo-password
+cat > .env.local <<'EOF'
+TUICAST_REFERENCE_PASSWORD=choose-an-ssh-password
+TUICAST_REFERENCE_APP_PASSWORD=choose-an-application-password
+EOF
+echo .env.local >> .gitignore
 ```
 
-The SSH transport uses `demo` / `demo-password`. The application displayed
-inside the terminal has its own test login: `operator` / `casting`.
+Load the file into each terminal you use for this guide:
+
+```sh
+set -a; . ./.env.local; set +a
+```
+
+## Start the reference TUI
+
+In a separate terminal, load `.env.local` and start TUICast's deterministic
+demonstration server:
+
+```sh
+reference-tui --ssh-address 127.0.0.1:2222
+```
+
+Both the SSH transport and the application displayed inside the terminal use
+the user ID `operator`. Their passwords are `TUICAST_REFERENCE_PASSWORD` and
+`TUICAST_REFERENCE_APP_PASSWORD`, respectively.
 
 ## Automate a login
 
@@ -57,6 +76,15 @@ Create `quickstart.ts`:
 
 ```typescript
 import { Driver, Keys } from "@castingcode/tuicast";
+
+// Reads a password from the environment so that it never appears in source code.
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is required`);
+  }
+  return value;
+}
 
 const driver = await Driver.launch();
 let connection;
@@ -66,8 +94,8 @@ try {
   connection = await driver.connect({
     protocol: "ssh",
     address: "127.0.0.1:2222",
-    username: "demo",
-    password: "demo-password",
+    username: "operator",
+    password: requiredEnv("TUICAST_REFERENCE_PASSWORD"),
     // Safe only because this example connects to a local test server.
     insecureSkipHostKeyCheck: true,
   });
@@ -76,7 +104,7 @@ try {
   await session.waitForText("LOGIN / AUTHENTICATION", { stableFor: 50 });
   await session.type("operator");
   await session.press(Keys.Tab);
-  await session.type("casting");
+  await session.type(requiredEnv("TUICAST_REFERENCE_APP_PASSWORD"));
   await session.press(Keys.Enter);
 
   const screen = await session.waitForText("TERMINAL TEST SYSTEM");
@@ -105,5 +133,6 @@ inspect lines, cells, colors, attributes, and the cursor. The `finally` block
 closes every resource even when an operation fails.
 
 For a real SSH server, replace `insecureSkipHostKeyCheck` with exactly one
-trusted host-key option: `knownHostsFile` or `hostKeyFingerprint`. Keep
-application and SSH credentials in environment variables or a secret manager.
+trusted host-key option: `knownHostsFile` or `hostKeyFingerprint`. As in this
+example, keep application and SSH credentials in environment variables or a
+secret manager rather than in source code.

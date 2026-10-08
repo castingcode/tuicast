@@ -14,12 +14,12 @@ import (
 
 func TestReferenceTerminalCompatibility(t *testing.T) {
 	Convey("Bubble Tea renders the reference workflow through TUICast's xterm profile", t, func() {
-		application, err := reference.New(80, 24)
+		application, err := reference.New(80, 24, testCredentials)
 		So(err, ShouldBeNil)
 		var transcript bytes.Buffer
 
 		err = application.Run(&pacedReader{fragments: [][]byte{
-			[]byte("operator\tcasting\x1bOP"),
+			[]byte("operator\ttest-password\x1bOP"),
 			[]byte("\x03"),
 		}}, &transcript)
 		So(err, ShouldBeNil)
@@ -34,12 +34,12 @@ func TestReferenceTerminalCompatibility(t *testing.T) {
 	})
 
 	Convey("The form workflow is reachable through terminal input", t, func() {
-		application, err := reference.New(80, 24)
+		application, err := reference.New(80, 24, testCredentials)
 		So(err, ShouldBeNil)
 		var transcript bytes.Buffer
 
 		err = application.Run(&pacedReader{fragments: [][]byte{
-			[]byte("operator\tcasting\x1bOP"),
+			[]byte("operator\ttest-password\x1bOP"),
 			[]byte("\x1b[B\r"),
 			[]byte("\x03"),
 		}}, &transcript)
@@ -49,12 +49,12 @@ func TestReferenceTerminalCompatibility(t *testing.T) {
 	})
 
 	Convey("The table and order details are reachable through terminal input", t, func() {
-		application, err := reference.New(80, 24)
+		application, err := reference.New(80, 24, testCredentials)
 		So(err, ShouldBeNil)
 		var transcript bytes.Buffer
 
 		err = application.Run(&pacedReader{fragments: [][]byte{
-			[]byte("operator\tcasting\x1bOP"),
+			[]byte("operator\ttest-password\x1bOP"),
 			[]byte("\x1b[B\x1b[B\r"),
 			[]byte("\x1b[B\r"),
 			[]byte("\x03"),
@@ -66,12 +66,12 @@ func TestReferenceTerminalCompatibility(t *testing.T) {
 	})
 
 	Convey("The cursor laboratory positions the terminal's real cursor", t, func() {
-		application, err := reference.New(80, 24)
+		application, err := reference.New(80, 24, testCredentials)
 		So(err, ShouldBeNil)
 		var transcript bytes.Buffer
 
 		err = application.Run(&pacedReader{fragments: [][]byte{
-			[]byte("operator\tcasting\x1bOP"),
+			[]byte("operator\ttest-password\x1bOP"),
 			[]byte("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r"),
 			[]byte("\x03"),
 		}}, &transcript)
@@ -91,12 +91,12 @@ func TestReferenceTerminalCompatibility(t *testing.T) {
 	})
 
 	Convey("Partial-screen scenarios produce staged differential frames", t, func() {
-		application, err := reference.New(80, 24)
+		application, err := reference.New(80, 24, testCredentials)
 		So(err, ShouldBeNil)
 		var transcript bytes.Buffer
 
 		err = application.Run(&pacedReader{fragments: [][]byte{
-			[]byte("operator\tcasting\x1bOP"),
+			[]byte("operator\ttest-password\x1bOP"),
 			[]byte("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r"),
 			[]byte("1"),
 			[]byte("x"),
@@ -132,3 +132,5 @@ func (r *pacedReader) Read(data []byte) (int, error) {
 	r.fragments = r.fragments[1:]
 	return copy(data, fragment), nil
 }
+
+var testCredentials = reference.Credentials{Username: "operator", Password: "test-password"}

@@ -10,9 +10,30 @@ describes the implemented behavior.
 
 ## Running
 
+The reference TUI has no default passwords so that its examples model good
+credential handling for real WMS environments. Every mode requires the
+application login password; SSH also requires the transport password. Each
+flag falls back to an environment variable, and the environment variables are
+preferred because command-line arguments are visible to other local users:
+
+| Setting | Flag | Environment variable | Default |
+| --- | --- | --- | --- |
+| Application user ID | `-app-username` | | `operator` |
+| Application password | `-app-password` | `TUICAST_REFERENCE_APP_PASSWORD` | none; required |
+| SSH user name | `-ssh-username` | | `operator` |
+| SSH password | `-ssh-password` | `TUICAST_REFERENCE_PASSWORD` | none; required for SSH unless `-ssh-users-file` is used |
+
+Developers keep the passwords in the repository's Git-ignored `.env.local`,
+created from the committed `.env.example`, and load it together with the
+committed non-secret `.env` before running the fixture or the examples:
+
 ```sh
+set -a; . ./.env; . ./.env.local; set +a
 go run ./cmd/reference-tui
 ```
+
+CI generates fresh random passwords for each run. The binaries read only
+environment variables and never parse `.env` files themselves.
 
 The command uses the current terminal dimensions. Bubble Tea owns raw mode,
 input decoding, resize events, alternate-screen rendering, and terminal cleanup.
@@ -29,7 +50,6 @@ go run ./cmd/reference-tui -telnet-address 127.0.0.1:2323
 go run ./cmd/reference-tui \
   -ssh-address 127.0.0.1:2222 \
   -ssh-username operator \
-  -ssh-password casting \
   -ssh-host-key ./host-key
 ```
 
@@ -40,8 +60,8 @@ the file replaces the `-ssh-username` and `-ssh-password` credential:
 
 ```json
 {
-  "operator": "casting",
-  "supervisor": "warehouse"
+  "operator": "...",
+  "supervisor": "..."
 }
 ```
 
@@ -51,15 +71,9 @@ go run ./cmd/reference-tui \
   -ssh-users-file ./users.json
 ```
 
-The deterministic test credentials are:
-
-```text
-User ID:  operator
-Password: casting
-```
-
-These are also the default SSH transport credentials. They are intentionally
-for local demonstrations and tests, not production deployment.
+For ease of demonstration, the login page displays the configured application
+credentials. The credentials are intended for local demonstrations and tests,
+not production deployment.
 
 The login page accepts Tab, Shift-Tab, or arrow keys to change fields, Enter or
 F1 to log in, and F2 to clear the form. The authenticated menu supports Up/Down,

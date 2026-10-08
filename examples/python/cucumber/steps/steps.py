@@ -3,7 +3,16 @@ import os
 import tuicast
 from behave import given, then, when
 
-PASSWORD = "casting"
+
+def required_env(name):
+    """Read a password from the environment so it is never committed.
+
+    See .env.example at the repository root.
+    """
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"{name} is required; see .env.example")
+    return value
 
 
 @given("I am connected to the reference TUI")
@@ -15,7 +24,7 @@ def connect(context):
         tuicast.SSH(
             os.getenv("TUICAST_REFERENCE_ADDRESS", "127.0.0.1:2222"),
             "operator",
-            password=PASSWORD,
+            password=required_env("TUICAST_REFERENCE_PASSWORD"),
             insecure_skip_host_key_check=True,
         )
     )
@@ -28,7 +37,7 @@ def connect(context):
 @given("I am logged in")
 def logged_in(context):
     enter_username(context, "operator")
-    enter_password(context, PASSWORD)
+    enter_configured_password(context)
     press(context, "Enter")
     screen(context, "main menu")
 
@@ -42,6 +51,11 @@ def enter_username(context, username):
 def enter_password(context, password):
     context.session.press(tuicast.Key.TAB)
     context.session.type(password)
+
+
+@when("I enter the configured password")
+def enter_configured_password(context):
+    enter_password(context, required_env("TUICAST_REFERENCE_APP_PASSWORD"))
 
 
 @when("I press {name}")

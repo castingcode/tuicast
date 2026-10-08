@@ -2,3 +2,5 @@
 .github
 .agents
 notes.txt
+.env.local
+.env.*.local

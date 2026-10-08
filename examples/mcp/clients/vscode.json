@@ -7,9 +7,7 @@
         "-config",
         "${workspaceFolder}/examples/mcp/reference-profile.json"
       ],
-      "env": {
-        "TUICAST_REFERENCE_PASSWORD": "casting"
-      }
+      "envFile": "${workspaceFolder}/.env.local"
     }
   }
 }

@@ -4,7 +4,16 @@ The fixture exposes the deterministic reference TUI over SSH on
 `127.0.0.1:2222` and Telnet on `127.0.0.1:2323`. The Go SDK launches the
 JSON-RPC driver process itself, just as a test suite normally would.
 
-From the repository root, build the binaries and start the fixture:
+The fixture and the examples read their passwords from the environment; nothing
+in this repository contains them. From the repository root, copy `.env.example`
+to `.env.local`, which Git ignores, and choose your own passwords. Load both
+environment files into every terminal used below:
+
+```sh
+set -a; . ./.env; . ./.env.local; set +a
+```
+
+Then build the binaries and start the fixture:
 
 ```sh
 mkdir -p /tmp/tuicast-example
@@ -59,6 +68,8 @@ TUICAST_DRIVER=/tmp/tuicast-example/tuicast-driver \
 ```
 
 Set `TUICAST_REFERENCE_ADDRESS` or `TUICAST_REFERENCE_TELNET_ADDRESS` to use
-other fixture addresses. The examples use the reference-only credentials
-`operator` / `casting`. Host-key checking is deliberately disabled only for
-this local deterministic fixture.
+other fixture addresses. The examples log in as `operator` using
+`TUICAST_REFERENCE_PASSWORD` for SSH and `TUICAST_REFERENCE_APP_PASSWORD` for the
+application, and fail with a clear message when either is missing. Docker
+Compose passes the same variables to the containers. Host-key checking is
+deliberately disabled only for this local deterministic fixture.

@@ -22,7 +22,7 @@ class ReferenceTest {
     connection =
         driver.connect(
             SshConfig.builder(env("TUICAST_REFERENCE_ADDRESS", "127.0.0.1:2222"), "operator")
-                .password("casting")
+                .password(requiredEnv("TUICAST_REFERENCE_PASSWORD"))
                 .insecureSkipHostKeyCheck(true)
                 .build());
   }
@@ -46,7 +46,7 @@ class ReferenceTest {
     s.waitForText("LOGIN / AUTHENTICATION", Duration.ofSeconds(30), Duration.ofMillis(50));
     s.type("operator");
     s.press(Key.Tab);
-    s.type("casting");
+    s.type(requiredEnv("TUICAST_REFERENCE_APP_PASSWORD"));
     s.press(Key.Enter);
     assertTrue(s.waitForText("TERMINAL TEST SYSTEM").contains("Authenticated as operator"));
   }
@@ -235,5 +235,14 @@ class ReferenceTest {
 
   private static String env(String name, String fallback) {
     return System.getenv().getOrDefault(name, fallback);
+  }
+
+  /** Reads a password from the environment so it is never committed. See .env.example. */
+  static String requiredEnv(String name) {
+    var value = System.getenv(name);
+    if (value == null || value.isEmpty()) {
+      throw new IllegalStateException(name + " is required; see .env.example");
+    }
+    return value;
   }
 }

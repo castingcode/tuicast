@@ -32,19 +32,38 @@ go mod init example.com/tuicast-go-demo
 go get github.com/castingcode/tuicast/sdk/go@v0.0.1
 ```
 
-## Start the reference TUI
+## Choose credentials
 
-In a separate terminal, start TUICast's deterministic demonstration server:
+The reference TUI has no default passwords, so choose your own and keep them
+out of source code, just as you would for a real WMS environment. Store them in
+a `.env.local` file that is excluded from version control:
 
 ```sh
-reference-tui \
-  --ssh-address 127.0.0.1:2222 \
-  --ssh-username demo \
-  --ssh-password demo-password
+cat > .env.local <<'EOF'
+TUICAST_REFERENCE_PASSWORD=choose-an-ssh-password
+TUICAST_REFERENCE_APP_PASSWORD=choose-an-application-password
+EOF
+echo .env.local >> .gitignore
 ```
 
-The SSH transport uses `demo` / `demo-password`. The application displayed
-inside the terminal has its own test login: `operator` / `casting`.
+Load the file into each terminal you use for this guide:
+
+```sh
+set -a; . ./.env.local; set +a
+```
+
+## Start the reference TUI
+
+In a separate terminal, load `.env.local` and start TUICast's deterministic
+demonstration server:
+
+```sh
+reference-tui --ssh-address 127.0.0.1:2222
+```
+
+Both the SSH transport and the application displayed inside the terminal use
+the user ID `operator`. Their passwords are `TUICAST_REFERENCE_PASSWORD` and
+`TUICAST_REFERENCE_APP_PASSWORD`, respectively.
 
 ## Automate a login
 
@@ -72,7 +91,26 @@ func main() {
 	slog.Info("login succeeded")
 }
 
+// requiredEnvironment reads a password from the environment so that it never
+// appears in source code.
+func requiredEnvironment(name string) (string, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		return "", fmt.Errorf("reading %s: the environment variable is required", name)
+	}
+	return value, nil
+}
+
 func run() (err error) {
+	sshPassword, err := requiredEnvironment("TUICAST_REFERENCE_PASSWORD")
+	if err != nil {
+		return err
+	}
+	appPassword, err := requiredEnvironment("TUICAST_REFERENCE_APP_PASSWORD")
+	if err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 	driver, err := tuicast.Launch(ctx)
 	if err != nil {
@@ -82,8 +120,8 @@ func run() (err error) {
 
 	connection, err := driver.Connect(ctx, tuicast.SSH{
 		Address:                  "127.0.0.1:2222",
-		Username:                 "demo",
-		Password:                 "demo-password",
+		Username:                 "operator",
+		Password:                 sshPassword,
 		InsecureSkipHostKeyCheck: true, // Safe only for this local test server.
 	})
 	if err != nil {
@@ -110,7 +148,7 @@ func run() (err error) {
 	if err := session.Press(ctx, tuicast.Tab); err != nil {
 		return fmt.Errorf("moving to password field: %w", err)
 	}
-	if err := session.Type(ctx, "casting"); err != nil {
+	if err := session.Type(ctx, appPassword); err != nil {
 		return fmt.Errorf("typing password: %w", err)
 	}
 	if err := session.Press(ctx, tuicast.Enter); err != nil {
@@ -141,5 +179,6 @@ inspect lines, cells, colors, attributes, and the cursor. Deferred cleanup
 closes the session, connection, and driver and preserves any cleanup errors.
 
 For a real SSH server, replace `InsecureSkipHostKeyCheck` with exactly one
-trusted host-key option: `KnownHostsFile` or `HostKeyFingerprint`. Keep
-application and SSH credentials in environment variables or a secret manager.
+trusted host-key option: `KnownHostsFile` or `HostKeyFingerprint`. As in this
+example, keep application and SSH credentials in environment variables or a
+secret manager rather than in source code.

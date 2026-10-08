@@ -14,7 +14,14 @@ import {
   type Session,
 } from "@castingcode/tuicast";
 
-const password = "casting";
+/** Reads a password from the environment so it is never committed. See .env.example. */
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is required; see .env.example`);
+  }
+  return value;
+}
 const driverPath = process.env.TUICAST_DRIVER ?? "tuicast-driver";
 const sshAddress = process.env.TUICAST_REFERENCE_ADDRESS ?? "127.0.0.1:2222";
 const telnetAddress =
@@ -34,7 +41,7 @@ async function launch(config?: ConnectionConfig): Promise<Fixture> {
         protocol: "ssh",
         address: sshAddress,
         username: "operator",
-        password,
+        password: requiredEnv("TUICAST_REFERENCE_PASSWORD"),
         insecureSkipHostKeyCheck: true,
       },
     );
@@ -56,7 +63,7 @@ async function login(session: Session): Promise<void> {
   await session.waitForText("LOGIN / AUTHENTICATION", { stableFor: 50 });
   await session.type("operator");
   await session.press(Keys.Tab);
-  await session.type(password);
+  await session.type(requiredEnv("TUICAST_REFERENCE_APP_PASSWORD"));
   await session.press(Keys.Enter);
   await session.waitForText("TERMINAL TEST SYSTEM");
 }

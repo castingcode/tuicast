@@ -30,13 +30,17 @@ const (
 )
 
 // Serve accepts Telnet connections until the context is canceled or the
-// listener fails. Each connection gets an isolated reference application.
-func Serve(ctx context.Context, listener net.Listener, logger *slog.Logger) error {
+// listener fails. Each connection gets an isolated reference application that
+// accepts login on its login screen.
+func Serve(ctx context.Context, listener net.Listener, login reference.Credentials, logger *slog.Logger) error {
 	if ctx == nil {
 		return fmt.Errorf("serving reference TUI over Telnet: context is required")
 	}
 	if listener == nil {
 		return fmt.Errorf("serving reference TUI over Telnet: listener is required")
+	}
+	if login.Username == "" || login.Password == "" {
+		return fmt.Errorf("serving reference TUI over Telnet: application login username and password are required")
 	}
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -53,11 +57,11 @@ func Serve(ctx context.Context, listener net.Listener, logger *slog.Logger) erro
 			}
 			return fmt.Errorf("accepting Telnet connection: %w", err)
 		}
-		go serveConnection(connection, logger)
+		go serveConnection(connection, login, logger)
 	}
 }
 
-func serveConnection(connection net.Conn, logger *slog.Logger) {
+func serveConnection(connection net.Conn, login reference.Credentials, logger *slog.Logger) {
 	defer connection.Close()
 	resizes := make(chan reference.Size, 1)
 	stream := &protocolStream{connection: connection, resizes: resizes}
@@ -66,7 +70,7 @@ func serveConnection(connection net.Conn, logger *slog.Logger) {
 		close(resizes)
 		return
 	}
-	application, err := reference.New(80, 24)
+	application, err := reference.New(80, 24, login)
 	if err == nil {
 		err = application.RunWithResizes(stream, stream, resizes)
 	}

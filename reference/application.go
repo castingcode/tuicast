@@ -14,11 +14,6 @@ import (
 	"github.com/charmbracelet/colorprofile"
 )
 
-const (
-	loginUser     = "operator"
-	loginPassword = "cast" + "ing"
-)
-
 type page uint8
 
 const (
@@ -68,6 +63,7 @@ var (
 type Application struct {
 	width       int
 	height      int
+	credentials Credentials
 	page        page
 	loginFocus  int
 	loginInputs [2]textinput.Model
@@ -94,10 +90,21 @@ type Size struct {
 	Height int
 }
 
-// New creates a reference application with the requested terminal dimensions.
-func New(width, height int) (*Application, error) {
+// Credentials are the user ID and password accepted by the application's
+// login screen.
+type Credentials struct {
+	Username string
+	Password string
+}
+
+// New creates a reference application with the requested terminal dimensions
+// that accepts credentials on its login screen.
+func New(width, height int, credentials Credentials) (*Application, error) {
 	if width <= 0 || height <= 0 {
 		return nil, fmt.Errorf("creating reference TUI: dimensions must be positive")
+	}
+	if credentials.Username == "" || credentials.Password == "" {
+		return nil, fmt.Errorf("creating reference TUI: login username and password are required")
 	}
 
 	username := textinput.New()
@@ -117,6 +124,7 @@ func New(width, height int) (*Application, error) {
 	return &Application{
 		width:       width,
 		height:      height,
+		credentials: credentials,
 		loginInputs: [2]textinput.Model{username, password},
 		form:        newFormModel(width, height),
 		table:       newTableModel(width, height),
@@ -474,7 +482,7 @@ func (a *Application) completeScenario(name string) {
 }
 
 func (a *Application) authenticate() {
-	if a.loginInputs[0].Value() != loginUser || a.loginInputs[1].Value() != loginPassword {
+	if a.loginInputs[0].Value() != a.credentials.Username || a.loginInputs[1].Value() != a.credentials.Password {
 		a.loginInputs[1].SetValue("")
 		a.focusLogin(0)
 		a.message = "Invalid user ID or password"
@@ -484,7 +492,7 @@ func (a *Application) authenticate() {
 	a.loginInputs[1].Blur()
 	a.page = pageMenu
 	a.selected = 0
-	a.message = "Authenticated as " + loginUser
+	a.message = "Authenticated as " + a.credentials.Username
 }
 
 func (a *Application) resetLogin(message string) {
@@ -538,7 +546,7 @@ func (a *Application) viewLogin() string {
 		"",
 		helpStyle.Render("F1 Login    F2 Clear    Ctrl-C Exit"),
 		"",
-		"Test credentials: operator / casting",
+		"Test credentials: " + a.credentials.Username + " / " + a.credentials.Password,
 	}
 	if a.message != "" {
 		lines = append(lines, "", errorStyle.Render(a.message))

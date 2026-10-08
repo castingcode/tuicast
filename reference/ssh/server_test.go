@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/castingcode/tuicast"
+	"github.com/castingcode/tuicast/reference"
 	referencessh "github.com/castingcode/tuicast/reference/ssh"
 	tuicastssh "github.com/castingcode/tuicast/ssh"
 	"github.com/castingcode/tuicast/xterm"
@@ -31,7 +32,8 @@ func TestServer(t *testing.T) {
 		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 		go func() {
 			serveDone <- referencessh.Serve(ctx, listener, referencessh.Config{
-				Users:  map[string]string{"operator": "casting", "supervisor": "warehouse"},
+				Users:  map[string]string{"operator": "ssh-test-password", "supervisor": "warehouse"},
+				Login:  reference.Credentials{Username: "operator", Password: "app-test-password"},
 				Signer: signer,
 				Logger: logger,
 			})

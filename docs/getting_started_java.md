@@ -65,19 +65,38 @@ Create `pom.xml` with the TUICast dependency from Maven Central:
 </project>
 ```
 
-## Start the reference TUI
+## Choose credentials
 
-In a separate terminal, start TUICast's deterministic demonstration server:
+The reference TUI has no default passwords, so choose your own and keep them
+out of source code, just as you would for a real WMS environment. Store them in
+a `.env.local` file that is excluded from version control:
 
 ```sh
-reference-tui \
-  --ssh-address 127.0.0.1:2222 \
-  --ssh-username demo \
-  --ssh-password demo-password
+cat > .env.local <<'EOF'
+TUICAST_REFERENCE_PASSWORD=choose-an-ssh-password
+TUICAST_REFERENCE_APP_PASSWORD=choose-an-application-password
+EOF
+echo .env.local >> .gitignore
 ```
 
-The SSH transport uses `demo` / `demo-password`. The application displayed
-inside the terminal has its own test login: `operator` / `casting`.
+Load the file into each terminal you use for this guide:
+
+```sh
+set -a; . ./.env.local; set +a
+```
+
+## Start the reference TUI
+
+In a separate terminal, load `.env.local` and start TUICast's deterministic
+demonstration server:
+
+```sh
+reference-tui --ssh-address 127.0.0.1:2222
+```
+
+Both the SSH transport and the application displayed inside the terminal use
+the user ID `operator`. Their passwords are `TUICAST_REFERENCE_PASSWORD` and
+`TUICAST_REFERENCE_APP_PASSWORD`, respectively.
 
 ## Automate a login
 
@@ -93,8 +112,8 @@ import dev.castingcode.tuicast.SessionConfig;
 public final class Quickstart {
   public static void main(String[] args) {
     var ssh =
-        SshConfig.builder("127.0.0.1:2222", "demo")
-            .password("demo-password")
+        SshConfig.builder("127.0.0.1:2222", "operator")
+            .password(requiredEnv("TUICAST_REFERENCE_PASSWORD"))
             // Safe only because this example connects to a local test server.
             .insecureSkipHostKeyCheck(true)
             .build();
@@ -106,7 +125,7 @@ public final class Quickstart {
       session.waitForText("LOGIN / AUTHENTICATION");
       session.type("operator");
       session.press(Key.Tab);
-      session.type("casting");
+      session.type(requiredEnv("TUICAST_REFERENCE_APP_PASSWORD"));
       session.press(Key.Enter);
 
       var screen = session.waitForText("TERMINAL TEST SYSTEM");
@@ -116,6 +135,15 @@ public final class Quickstart {
 
       System.out.println("Login succeeded");
     }
+  }
+
+  /** Reads a password from the environment so that it never appears in source code. */
+  private static String requiredEnv(String name) {
+    var value = System.getenv(name);
+    if (value == null || value.isEmpty()) {
+      throw new IllegalStateException(name + " is required");
+    }
+    return value;
   }
 }
 ```
@@ -133,5 +161,5 @@ closes the session, connection, and driver even when an operation fails.
 
 For a real SSH server, replace `insecureSkipHostKeyCheck(true)` with exactly one
 trusted host-key option: `knownHostsFile(...)` or `hostKeyFingerprint(...)`.
-Keep application and SSH credentials in environment variables or a secret
-manager.
+As in this example, keep application and SSH credentials in environment
+variables or a secret manager rather than in source code.

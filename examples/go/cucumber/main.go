@@ -15,8 +15,6 @@ import (
 	messages "github.com/cucumber/messages/go/v34"
 )
 
-const referencePassword = "cast" + "ing"
-
 type scenario struct {
 	driver              *tuicast.Driver
 	connection          *tuicast.Connection
@@ -55,6 +53,7 @@ func (s *scenario) initialize(ctx *godog.ScenarioContext) {
 	ctx.Given(`^I am logged in$`, s.login)
 	ctx.When(`^I enter username "([^"]*)"$`, s.enterUsername)
 	ctx.When(`^I enter password "([^"]*)"$`, s.enterPassword)
+	ctx.When(`^I enter the configured password$`, s.enterConfiguredPassword)
 	ctx.When(`^I press (.+)$`, s.press)
 	ctx.When(`^I select the "([^"]*)" menu option$`, s.selectMenuOption)
 	ctx.Then(`^the application is on the "([^"]*)" screen$`, s.verifyScreen)
@@ -121,10 +120,14 @@ func (s *scenario) connect(ctx context.Context) error {
 		return fmt.Errorf("launching driver: %w", err)
 	}
 	s.driver = driver
+	password, err := requiredEnvironment("TUICAST_REFERENCE_PASSWORD")
+	if err != nil {
+		return fmt.Errorf("connecting to reference TUI: %w", err)
+	}
 	connection, err := driver.Connect(ctx, tuicast.SSH{
 		Address:                  environment("TUICAST_REFERENCE_ADDRESS", "127.0.0.1:2222"),
 		Username:                 "operator",
-		Password:                 referencePassword,
+		Password:                 password,
 		InsecureSkipHostKeyCheck: true,
 	})
 	if err != nil {
@@ -146,7 +149,7 @@ func (s *scenario) login(ctx context.Context) error {
 	if err := s.enterUsername(ctx, "operator"); err != nil {
 		return err
 	}
-	if err := s.enterPassword(ctx, referencePassword); err != nil {
+	if err := s.enterConfiguredPassword(ctx); err != nil {
 		return err
 	}
 	if err := s.press(ctx, "Enter"); err != nil {
@@ -163,6 +166,14 @@ func (s *scenario) enterUsername(ctx context.Context, username string) error {
 		return fmt.Errorf("entering username: %w", err)
 	}
 	return nil
+}
+
+func (s *scenario) enterConfiguredPassword(ctx context.Context) error {
+	password, err := requiredEnvironment("TUICAST_REFERENCE_APP_PASSWORD")
+	if err != nil {
+		return fmt.Errorf("entering password: %w", err)
+	}
+	return s.enterPassword(ctx, password)
 }
 
 func (s *scenario) enterPassword(ctx context.Context, password string) error {
@@ -404,4 +415,14 @@ func environment(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// requiredEnvironment reads a password from the environment so that it is
+// never committed. See .env.example at the repository root.
+func requiredEnvironment(name string) (string, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		return "", fmt.Errorf("reading %s: the environment variable is required; see .env.example", name)
+	}
+	return value, nil
 }

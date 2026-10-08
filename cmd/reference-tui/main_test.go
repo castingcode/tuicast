@@ -19,7 +19,7 @@ func TestServerFlags(t *testing.T) {
 		err := run(context.Background(), []string{
 			"--ssh-address", "127.0.0.1:0",
 			"--telnet-address", "127.0.0.1:0",
-		}, nil, io.Discard, logger)
+		}, environment(nil), nil, io.Discard, logger)
 
 		So(err, ShouldNotBeNil)
 		So(err.Error(), ShouldContainSubstring, "mutually exclusive")
@@ -29,25 +29,56 @@ func TestServerFlags(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		So(run(ctx, []string{"--ssh-address", "127.0.0.1:0"}, nil, io.Discard, logger), ShouldBeNil)
+		So(run(ctx, []string{"--ssh-address", "127.0.0.1:0"}, environment(map[string]string{
+			sshPasswordVariable: "ssh-test-password",
+			appPasswordVariable: "app-test-password",
+		}), nil, io.Discard, logger), ShouldBeNil)
+	})
+
+	Convey("SSH serving requires an SSH password from the environment or flags", t, func() {
+		err := run(context.Background(), []string{"--ssh-address", "127.0.0.1:0"}, environment(map[string]string{
+			appPasswordVariable: "app-test-password",
+		}), nil, io.Discard, logger)
+		So(err, ShouldNotBeNil)
+		So(err.Error(), ShouldContainSubstring, sshPasswordVariable)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		So(run(ctx, []string{"--ssh-address", "127.0.0.1:0", "--ssh-password", "ssh-test-password"}, environment(map[string]string{
+			appPasswordVariable: "app-test-password",
+		}), nil, io.Discard, logger), ShouldBeNil)
+	})
+
+	Convey("Every mode requires an application login password", t, func() {
+		for _, arguments := range [][]string{
+			{"--ssh-address", "127.0.0.1:0"},
+			{"--telnet-address", "127.0.0.1:0"},
+			{},
+		} {
+			err := run(context.Background(), arguments, environment(map[string]string{
+				sshPasswordVariable: "ssh-test-password",
+			}), nil, io.Discard, logger)
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, appPasswordVariable)
+		}
 	})
 
 	Convey("Telnet serving accepts an ephemeral listen address", t, func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		So(run(ctx, []string{"--telnet-address", "127.0.0.1:0"}, nil, io.Discard, logger), ShouldBeNil)
+		So(run(ctx, []string{"--telnet-address", "127.0.0.1:0", "--app-password", "app-test-password"}, environment(nil), nil, io.Discard, logger), ShouldBeNil)
 	})
 
 	Convey("SSH users can be loaded from a JSON file", t, func() {
 		path := filepath.Join(t.TempDir(), "users.json")
-		So(os.WriteFile(path, []byte(`{"operator":"casting","supervisor":"warehouse"}`), 0o600), ShouldBeNil)
+		So(os.WriteFile(path, []byte(`{"operator":"ssh-test-password","supervisor":"warehouse"}`), 0o600), ShouldBeNil)
 
 		users, err := sshUsers(path, "ignored", "ignored")
 
 		So(err, ShouldBeNil)
 		So(users, ShouldResemble, map[string]string{
-			"operator":   "casting",
+			"operator":   "ssh-test-password",
 			"supervisor": "warehouse",
 		})
 	})
@@ -69,18 +100,23 @@ func TestInformationFlags(t *testing.T) {
 	for _, flagName := range []string{"-help", "-h"} {
 		Convey("The "+flagName+" flag prints usage and exits without serving", t, func() {
 			var output bytes.Buffer
-			So(run(context.Background(), []string{flagName}, nil, &output, logger), ShouldBeNil)
+			So(run(context.Background(), []string{flagName}, environment(nil), nil, &output, logger), ShouldBeNil)
 			So(output.String(), ShouldStartWith, "Usage: reference-tui")
 			So(output.String(), ShouldContainSubstring, "-ssh-address")
 			So(output.String(), ShouldContainSubstring, "-version")
+			So(output.String(), ShouldContainSubstring, appPasswordVariable)
 		})
 	}
 
 	for _, flagName := range []string{"-version", "-v"} {
 		Convey("The "+flagName+" flag prints build metadata and exits without serving", t, func() {
 			var output bytes.Buffer
-			So(run(context.Background(), []string{flagName}, nil, &output, logger), ShouldBeNil)
+			So(run(context.Background(), []string{flagName}, environment(nil), nil, &output, logger), ShouldBeNil)
 			So(output.String(), ShouldEqual, "reference-tui dev (commit none, built unknown)\n")
 		})
 	}
+}
+
+func environment(values map[string]string) func(string) string {
+	return func(name string) string { return values[name] }
 }

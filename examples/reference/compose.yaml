@@ -4,6 +4,9 @@ services:
       context: ../..
       dockerfile: docker/reference-tui.Dockerfile
     command: ["--ssh-address", "0.0.0.0:2222"]
+    environment:
+      TUICAST_REFERENCE_PASSWORD: ${TUICAST_REFERENCE_PASSWORD:?load .env.local first; see .env.example}
+      TUICAST_REFERENCE_APP_PASSWORD: ${TUICAST_REFERENCE_APP_PASSWORD:?load .env.local first; see .env.example}
     ports:
       - "${TUICAST_REFERENCE_PORT:-2222}:2222"
   reference-tui-telnet:
@@ -11,5 +14,7 @@ services:
       context: ../..
       dockerfile: docker/reference-tui.Dockerfile
     command: ["--telnet-address", "0.0.0.0:2323"]
+    environment:
+      TUICAST_REFERENCE_APP_PASSWORD: ${TUICAST_REFERENCE_APP_PASSWORD:?load .env.local first; see .env.example}
     ports:
       - "${TUICAST_REFERENCE_TELNET_PORT:-2323}:2323"

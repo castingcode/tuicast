@@ -9,7 +9,7 @@ started guide first, for example
 and use only the SDK API it documents.
 
 The test should verify this behavior: after logging in with application user
-ID `operator` and password `casting`, opening `Tables` from
+ID `operator` and the application password, opening `Tables` from
 `TERMINAL TEST SYSTEM`, and filtering the `WAREHOUSE ORDERS` table for `HOLD`,
 opening an order shows its details with status `HOLD`.
 
@@ -17,9 +17,10 @@ opening an order shows its details with status `HOLD`.
    and screen states the workflow needs. Inspect the screen after each step
    instead of assuming input was accepted.
 2. Return to a known starting point by closing the session and opening a new
-   one. Start recording, then repeat only the steps the test needs. Type the
-   password with the `password` parameter so it is not stored in the
-   recording.
+   one. Start recording, then repeat only the steps the test needs. Ask me for
+   the application password, and type it with the `password` parameter so it
+   is not stored in the recording. Never repeat it in your reports or in
+   files.
 3. Wait for every screen state the test will assert. Use `tuicast_wait` for
    assertions that need more than one condition or an exact line or cursor
    position, a stable period where the screen redraws after input, and
@@ -28,8 +29,9 @@ opening an order shows its details with status `HOLD`.
    call: `type` to typing text, `press` to pressing a key, `waitForText` and
    `wait` to the SDK's wait with an equivalent matcher, and `waitForIdle` to
    its idle wait. Keep the recorded timeouts and stable periods.
-5. Read the connection address, SSH username, and passwords from environment
-   variables or test configuration instead of embedding them in the test.
+5. Read the passwords from the `TUICAST_REFERENCE_PASSWORD` and
+   `TUICAST_REFERENCE_APP_PASSWORD` environment variables, and the address from
+   `TUICAST_REFERENCE_ADDRESS`, instead of embedding them in the test.
 6. Report the recording you used and the test you wrote. Point out any step
    that relies on screen content likely to vary between runs.
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/castingcode/tuicast"
+	"github.com/castingcode/tuicast/reference"
 	referencetelnet "github.com/castingcode/tuicast/reference/telnet"
 	"github.com/castingcode/tuicast/telnet"
 	"github.com/castingcode/tuicast/vt220"
@@ -23,7 +24,7 @@ func TestServer(t *testing.T) {
 		serveDone := make(chan error, 1)
 		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 		go func() {
-			serveDone <- referencetelnet.Serve(ctx, listener, logger)
+			serveDone <- referencetelnet.Serve(ctx, listener, reference.Credentials{Username: "operator", Password: "app-test-password"}, logger)
 		}()
 		defer func() {
 			cancel()

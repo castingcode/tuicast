@@ -25,16 +25,22 @@ export PATH="$(go env GOPATH)/bin:$PATH"
 
 ## Start the reference terminal
 
-In a separate terminal, start the local SSH fixture:
+The fixture reads its passwords from the environment. From the repository root,
+copy `.env.example` to `.env.local`, which Git ignores, and choose your own
+passwords. Then, in a separate terminal, load them and start the local SSH
+fixture:
 
 ```sh
+set -a; . ./.env; . ./.env.local; set +a
 reference-tui --ssh-address 127.0.0.1:2222
 ```
 
-The fixture uses `operator` / `casting` for both SSH authentication and the
-application login. The example profile disables SSH host-key checking only for
-this local deterministic server. Use a known-hosts file or pinned fingerprint
-for any real endpoint.
+The SSH user and the application user are both `operator`. `tuicast-mcp` reads
+the SSH password from `TUICAST_REFERENCE_PASSWORD`; the model never sees it.
+The prompts ask you for the application password when the agent needs to log
+in. The example profile disables SSH host-key checking only for this local
+deterministic server. Use a known-hosts file or pinned fingerprint for any real
+endpoint.
 
 ## Configure an MCP client
 
@@ -52,19 +58,18 @@ If the server log reports `spawn tuicast-mcp ENOENT`, set `command` to the
 absolute path printed by `command -v tuicast-mcp`, such as
 `/Users/you/go/bin/tuicast-mcp`.
 
-The template sets the fixture's published password directly because VS Code
-does not forward servers that use `${input:...}` prompts to Copilot CLI (Agent
-Host) chat sessions. For a real endpoint, keep credentials out of the
-workspace: use `envFile` with an untracked file or inherit the variable from
-the environment.
+The template loads `TUICAST_REFERENCE_PASSWORD` from the workspace's
+Git-ignored `.env.local` with `envFile`. This keeps the password out of the
+configuration file and also works for Copilot CLI (Agent Host) chat sessions,
+which do not support servers that use `${input:...}` prompts.
 
 ### Cursor
 
-Export the reference password before launching Cursor so its MCP subprocess can
-read it:
+Load `.env.local` before launching Cursor so its MCP subprocess can read the
+password:
 
 ```sh
-export TUICAST_REFERENCE_PASSWORD=casting
+set -a; . ./.env; . ./.env.local; set +a
 cursor .
 ```
 

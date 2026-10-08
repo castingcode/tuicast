@@ -34,25 +34,46 @@ source .venv/bin/activate
 python -m pip install tuicast==0.0.1
 ```
 
-## Start the reference TUI
+## Choose credentials
 
-In a separate terminal, start TUICast's deterministic demonstration server:
+The reference TUI has no default passwords, so choose your own and keep them
+out of source code, just as you would for a real WMS environment. Store them in
+a `.env.local` file that is excluded from version control:
 
 ```sh
-reference-tui \
-  --ssh-address 127.0.0.1:2222 \
-  --ssh-username demo \
-  --ssh-password demo-password
+cat > .env.local <<'EOF'
+TUICAST_REFERENCE_PASSWORD=choose-an-ssh-password
+TUICAST_REFERENCE_APP_PASSWORD=choose-an-application-password
+EOF
+echo .env.local >> .gitignore
 ```
 
-The SSH transport uses `demo` / `demo-password`. The application displayed
-inside the terminal has its own test login: `operator` / `casting`.
+Load the file into each terminal you use for this guide:
+
+```sh
+set -a; . ./.env.local; set +a
+```
+
+## Start the reference TUI
+
+In a separate terminal, load `.env.local` and start TUICast's deterministic
+demonstration server:
+
+```sh
+reference-tui --ssh-address 127.0.0.1:2222
+```
+
+Both the SSH transport and the application displayed inside the terminal use
+the user ID `operator`. Their passwords are `TUICAST_REFERENCE_PASSWORD` and
+`TUICAST_REFERENCE_APP_PASSWORD`, respectively.
 
 ## Automate a login
 
 Create `quickstart.py`:
 
 ```python
+import os
+
 import tuicast
 
 
@@ -60,8 +81,8 @@ with tuicast.Driver.launch() as driver:
     with driver.connect(
         tuicast.SSH(
             "127.0.0.1:2222",
-            "demo",
-            password="demo-password",
+            "operator",
+            password=os.environ["TUICAST_REFERENCE_PASSWORD"],
             # Safe only because this example connects to a local test server.
             insecure_skip_host_key_check=True,
         )
@@ -70,7 +91,7 @@ with tuicast.Driver.launch() as driver:
             session.wait_for_text("LOGIN / AUTHENTICATION", stable_for=0.05)
             session.type("operator")
             session.press(tuicast.Key.TAB)
-            session.type("casting")
+            session.type(os.environ["TUICAST_REFERENCE_APP_PASSWORD"])
             session.press(tuicast.Key.ENTER)
 
             screen = session.wait_for_text("TERMINAL TEST SYSTEM")
@@ -92,5 +113,6 @@ inspect lines, cells, colors, attributes, and the cursor. The context managers
 close the session, connection, and driver even when an operation fails.
 
 For a real SSH server, replace `insecure_skip_host_key_check=True` with exactly
-one trusted host-key option: `known_hosts_file` or `host_key_fingerprint`. Keep
-application and SSH credentials in environment variables or a secret manager.
+one trusted host-key option: `known_hosts_file` or `host_key_fingerprint`. As in
+this example, keep application and SSH credentials in environment variables or
+a secret manager rather than in source code.

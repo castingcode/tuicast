@@ -22,6 +22,13 @@ import (
 	"golang.org/x/term"
 )
 
+// Environment variables that supply passwords when the corresponding flags are
+// omitted. There are deliberately no default passwords.
+const (
+	sshPasswordVariable = "TUICAST_REFERENCE_PASSWORD"
+	appPasswordVariable = "TUICAST_REFERENCE_APP_PASSWORD"
+)
+
 // Build metadata set by the release build with -ldflags "-X main.version=...".
 var (
 	version = "dev"
@@ -33,20 +40,22 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := run(ctx, os.Args[1:], os.Stdin, os.Stdout, logger); err != nil {
+	if err := run(ctx, os.Args[1:], os.Getenv, os.Stdin, os.Stdout, logger); err != nil {
 		logger.Error("reference TUI stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, arguments []string, input *os.File, output io.Writer, logger *slog.Logger) error {
+func run(ctx context.Context, arguments []string, getenv func(string) string, input *os.File, output io.Writer, logger *slog.Logger) error {
 	flags := flag.NewFlagSet("reference-tui", flag.ContinueOnError)
 	flags.SetOutput(output)
 	sshAddress := flags.String("ssh-address", "", "listen address for SSH (for example 127.0.0.1:2222)")
 	telnetAddress := flags.String("telnet-address", "", "listen address for Telnet (for example 127.0.0.1:2323)")
 	sshUsername := flags.String("ssh-username", "operator", "SSH username")
-	sshPassword := flags.String("ssh-password", "casting", "SSH password")
+	sshPassword := flags.String("ssh-password", "", "SSH password; defaults to $"+sshPasswordVariable+", which is preferred because command-line values are visible to other local users")
 	sshUsersFile := flags.String("ssh-users-file", "", "JSON file mapping SSH usernames to passwords")
+	appUsername := flags.String("app-username", "operator", "user ID accepted by the application login screen")
+	appPassword := flags.String("app-password", "", "password accepted by the application login screen; defaults to $"+appPasswordVariable+", which is preferred")
 	sshHostKey := flags.String("ssh-host-key", "", "PEM-encoded SSH host private key; generated in memory when omitted")
 	var showHelp, showVersion bool
 	flags.BoolVar(&showHelp, "help", false, "show this help and exit")
@@ -78,8 +87,16 @@ func run(ctx context.Context, arguments []string, input *os.File, output io.Writ
 	if *sshAddress != "" && *telnetAddress != "" {
 		return fmt.Errorf("configuring reference TUI server: --ssh-address and --telnet-address are mutually exclusive")
 	}
+	login := reference.Credentials{Username: *appUsername, Password: valueOrEnvironment(*appPassword, getenv, appPasswordVariable)}
+	if login.Username == "" || login.Password == "" {
+		return fmt.Errorf("configuring reference TUI: application login password is required; set %s (see .env.example) or -app-password", appPasswordVariable)
+	}
 	if *sshAddress != "" {
-		users, err := sshUsers(*sshUsersFile, *sshUsername, *sshPassword)
+		password := valueOrEnvironment(*sshPassword, getenv, sshPasswordVariable)
+		if *sshUsersFile == "" && password == "" {
+			return fmt.Errorf("configuring reference TUI server: SSH password is required; set %s (see .env.example), -ssh-password, or -ssh-users-file", sshPasswordVariable)
+		}
+		users, err := sshUsers(*sshUsersFile, *sshUsername, password)
 		if err != nil {
 			return err
 		}
@@ -94,6 +111,7 @@ func run(ctx context.Context, arguments []string, input *os.File, output io.Writ
 		logger.Info("reference TUI SSH server listening", "address", listener.Addr(), "hostKeyFingerprint", gossh.FingerprintSHA256(signer.PublicKey()))
 		return referencessh.Serve(ctx, listener, referencessh.Config{
 			Users:  users,
+			Login:  login,
 			Signer: signer,
 			Logger: logger,
 		})
@@ -104,9 +122,16 @@ func run(ctx context.Context, arguments []string, input *os.File, output io.Writ
 			return fmt.Errorf("listening for reference Telnet connections: %w", err)
 		}
 		logger.Info("reference TUI Telnet server listening", "address", listener.Addr())
-		return referencetelnet.Serve(ctx, listener, logger)
+		return referencetelnet.Serve(ctx, listener, login, logger)
 	}
-	return runInteractive(input, output)
+	return runInteractive(input, output, login)
+}
+
+func valueOrEnvironment(value string, getenv func(string) string, variable string) string {
+	if value != "" {
+		return value
+	}
+	return getenv(variable)
 }
 
 func sshUsers(path, username, password string) (map[string]string, error) {
@@ -132,7 +157,7 @@ func sshUsers(path, username, password string) (map[string]string, error) {
 	return users, nil
 }
 
-func runInteractive(input *os.File, output io.Writer) error {
+func runInteractive(input *os.File, output io.Writer, login reference.Credentials) error {
 	width, height := 80, 24
 	if outputFile, ok := output.(*os.File); ok && term.IsTerminal(int(outputFile.Fd())) {
 		terminalWidth, terminalHeight, err := term.GetSize(int(outputFile.Fd()))
@@ -142,7 +167,7 @@ func runInteractive(input *os.File, output io.Writer) error {
 		width, height = terminalWidth, terminalHeight
 	}
 
-	application, err := reference.New(width, height)
+	application, err := reference.New(width, height, login)
 	if err != nil {
 		return fmt.Errorf("creating reference application: %w", err)
 	}

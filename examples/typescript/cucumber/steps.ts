@@ -21,7 +21,15 @@ import {
 } from "@castingcode/tuicast";
 
 setDefaultTimeout(40_000);
-const password = "casting";
+
+/** Reads a password from the environment so it is never committed. See .env.example. */
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is required; see .env.example`);
+  }
+  return value;
+}
 
 class State extends World {
   driver?: Driver;
@@ -43,7 +51,7 @@ Given("I am connected to the reference TUI", async function (this: State) {
     protocol: "ssh",
     address: process.env.TUICAST_REFERENCE_ADDRESS ?? "127.0.0.1:2222",
     username: "operator",
-    password,
+    password: requiredEnv("TUICAST_REFERENCE_PASSWORD"),
     insecureSkipHostKeyCheck: true,
   });
   this.session = await this.connection.openSession({
@@ -55,7 +63,7 @@ Given("I am connected to the reference TUI", async function (this: State) {
 Given("I am logged in", async function (this: State) {
   await this.session!.type("operator");
   await this.session!.press(Keys.Tab);
-  await this.session!.type(password);
+  await this.session!.type(requiredEnv("TUICAST_REFERENCE_APP_PASSWORD"));
   await this.session!.press(Keys.Enter);
   await this.session!.waitForText("TERMINAL TEST SYSTEM");
 });
@@ -66,6 +74,11 @@ When(
     await this.session!.type(value);
   },
 );
+
+When("I enter the configured password", async function (this: State) {
+  await this.session!.press(Keys.Tab);
+  await this.session!.type(requiredEnv("TUICAST_REFERENCE_APP_PASSWORD"));
+});
 
 When(
   /^I enter password "([^"]*)"$/,

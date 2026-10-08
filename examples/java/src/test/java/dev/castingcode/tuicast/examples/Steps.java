@@ -37,7 +37,7 @@ public class Steps {
             SshConfig.builder(
                     System.getenv().getOrDefault("TUICAST_REFERENCE_ADDRESS", "127.0.0.1:2222"),
                     "operator")
-                .password("casting")
+                .password(ReferenceTest.requiredEnv("TUICAST_REFERENCE_PASSWORD"))
                 .insecureSkipHostKeyCheck(true)
                 .build());
     session =
@@ -50,7 +50,7 @@ public class Steps {
   @Given("I am logged in")
   public void login() {
     username("operator");
-    password("casting");
+    configuredPassword();
     press("Enter");
     screen =
         session.waitForText("TERMINAL TEST SYSTEM", Duration.ofSeconds(30), Duration.ofMillis(50));
@@ -66,6 +66,11 @@ public class Steps {
   public void password(String s) {
     session.press(Key.Tab);
     session.type(s);
+  }
+
+  @When("I enter the configured password")
+  public void configuredPassword() {
+    password(ReferenceTest.requiredEnv("TUICAST_REFERENCE_APP_PASSWORD"));
   }
 
   @When("I press {word}")

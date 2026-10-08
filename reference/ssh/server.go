@@ -16,6 +16,7 @@ import (
 // Config configures authentication and host identity for a reference server.
 type Config struct {
 	Users  map[string]string
+	Login  reference.Credentials
 	Signer gossh.Signer
 	Logger *slog.Logger
 }
@@ -36,6 +37,9 @@ func Serve(ctx context.Context, listener net.Listener, config Config) error {
 		if username == "" || password == "" {
 			return fmt.Errorf("serving reference TUI over SSH: usernames and passwords must not be empty")
 		}
+	}
+	if config.Login.Username == "" || config.Login.Password == "" {
+		return fmt.Errorf("serving reference TUI over SSH: application login username and password are required")
 	}
 	if config.Signer == nil {
 		return fmt.Errorf("serving reference TUI over SSH: host signer is required")
@@ -67,11 +71,11 @@ func Serve(ctx context.Context, listener net.Listener, config Config) error {
 			}
 			return fmt.Errorf("accepting SSH connection: %w", err)
 		}
-		go serveConnection(connection, serverConfig, logger)
+		go serveConnection(connection, serverConfig, config.Login, logger)
 	}
 }
 
-func serveConnection(raw net.Conn, config *gossh.ServerConfig, logger *slog.Logger) {
+func serveConnection(raw net.Conn, config *gossh.ServerConfig, login reference.Credentials, logger *slog.Logger) {
 	connection, channels, requests, err := gossh.NewServerConn(raw, config)
 	if err != nil {
 		logger.Warn("SSH handshake failed", "remote", raw.RemoteAddr(), "error", err)
@@ -90,11 +94,11 @@ func serveConnection(raw net.Conn, config *gossh.ServerConfig, logger *slog.Logg
 			logger.Warn("SSH session channel failed", "remote", raw.RemoteAddr(), "error", err)
 			continue
 		}
-		go serveSession(channel, requests, logger)
+		go serveSession(channel, requests, login, logger)
 	}
 }
 
-func serveSession(channel gossh.Channel, requests <-chan *gossh.Request, logger *slog.Logger) {
+func serveSession(channel gossh.Channel, requests <-chan *gossh.Request, login reference.Credentials, logger *slog.Logger) {
 	defer channel.Close()
 	width, height := 80, 24
 	resizes := make(chan reference.Size, 1)
@@ -140,7 +144,7 @@ func serveSession(channel gossh.Channel, requests <-chan *gossh.Request, logger 
 			running = true
 			_ = request.Reply(true, nil)
 			go func(width, height int) {
-				application, err := reference.New(width, height)
+				application, err := reference.New(width, height, login)
 				if err == nil {
 					err = application.RunWithResizes(channel, channel, resizes)
 				}
