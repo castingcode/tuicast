@@ -611,9 +611,7 @@ func (t *Terminal) handleCSI(command parsing.Command, parameters []parsing.Param
 
 	switch command.Final {
 	case '@':
-		if t.xterm {
-			t.insertCharacters(param(parameters, 0, 1))
-		}
+		t.insertCharacters(param(parameters, 0, 1))
 	case 'A':
 		t.active.cursor.Row = max(0, t.active.cursor.Row-param(parameters, 0, 1))
 		t.cursorChanged()
@@ -638,25 +636,15 @@ func (t *Terminal) handleCSI(command parsing.Command, parameters []parsing.Param
 	case 'K':
 		t.eraseLine(param(parameters, 0, 0))
 	case 'L':
-		if t.xterm {
-			t.insertLines(param(parameters, 0, 1))
-		}
+		t.insertLines(param(parameters, 0, 1))
 	case 'M':
-		if t.xterm {
-			t.deleteLines(param(parameters, 0, 1))
-		}
+		t.deleteLines(param(parameters, 0, 1))
 	case 'P':
-		if t.xterm {
-			t.deleteCharacters(param(parameters, 0, 1))
-		}
+		t.deleteCharacters(param(parameters, 0, 1))
 	case 'X':
-		if t.xterm {
-			t.eraseCharacters(param(parameters, 0, 1))
-		}
+		t.eraseCharacters(param(parameters, 0, 1))
 	case 'h', 'l':
-		if t.xterm {
-			t.setModes(parameters, command.Final == 'h')
-		}
+		t.setModes(parameters, command.Final == 'h')
 	case 'm':
 		t.setRendition(parameters)
 	case 'r':

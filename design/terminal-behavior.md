@@ -40,6 +40,9 @@ automation:
 - carriage return, line feed, backspace, and horizontal tab
 - cursor movement and direct cursor positioning
 - display and line erasure
+- character insertion, deletion, and erasure (`ICH`, `DCH`, `ECH`)
+- line insertion and deletion inside the scrolling region (`IL`, `DL`)
+- insert/replace mode (`IRM`, mode `4`)
 - vertical scrolling and configurable top/bottom margins
 - save and restore cursor, index, next line, reverse index, and reset
 - bold, underline, blink, reverse, conceal, and basic ANSI colors
@@ -48,8 +51,13 @@ automation:
 
 Unsupported sequences are ignored without writing their bytes to the screen.
 Device-status responses, user-defined keys, downloadable character sets,
-double-width or double-height lines, insert/delete operations, and full VT220
-conformance remain outside this initial profile.
+double-width or double-height lines, and full VT220 conformance remain outside
+this initial profile.
+
+The insert and delete operations are part of the real VT220 and of its terminfo
+entry, so applications that see `TERM=vt220` use them for incremental redraws.
+Ignoring them leaves the emulated screen out of step with what the application
+believes it drew, which an incremental renderer never repairs.
 
 ## xterm Profile
 
@@ -58,8 +66,6 @@ subset commonly used by full-screen command-line applications:
 
 - primary and alternate screen buffers (`47`, `1047`, and `1049` modes)
 - cursor visibility and autowrap private modes
-- insert and delete modes for characters and lines
-- erase-character operations
 - bright ANSI colors and 256-color indexed foregrounds and backgrounds
 - width-two and combining Unicode character cell geometry
 - resizing both screen buffers while preserving their overlapping regions

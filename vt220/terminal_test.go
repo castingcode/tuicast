@@ -133,6 +133,39 @@ func TestTerminal(t *testing.T) {
 		So(terminal.Snapshot().Text(), ShouldEqual, "111\n333\n   \n444")
 	})
 
+	Convey("Character insertion, deletion, and erasure shift or blank the current line", t, func() {
+		terminal := newTerminal(8, 1)
+		write(terminal, "abcdefgh\x1b[3G\x1b[2@")
+		So(terminal.Snapshot().Line(0), ShouldEqual, "ab  cdef")
+
+		terminal = newTerminal(8, 1)
+		write(terminal, "abcdefgh\x1b[3G\x1b[2P")
+		So(terminal.Snapshot().Line(0), ShouldEqual, "abefgh  ")
+
+		terminal = newTerminal(8, 1)
+		write(terminal, "abcdefgh\x1b[3G\x1b[2X")
+		So(terminal.Snapshot().Line(0), ShouldEqual, "ab  efgh")
+	})
+
+	Convey("Insert mode shifts existing text right as characters are written", t, func() {
+		terminal := newTerminal(25, 1)
+		write(terminal, "Target dimensions: 80x24\x1b[1;20H132\x1b[4hx\x1b[4l")
+		So(terminal.Snapshot().Line(0), ShouldEqual, "Target dimensions: 132x24")
+
+		write(terminal, "\x1b[1;1HT")
+		So(terminal.Snapshot().Line(0), ShouldEqual, "Target dimensions: 132x24")
+	})
+
+	Convey("Line insertion and deletion operate inside the scrolling region", t, func() {
+		terminal := newTerminal(4, 4)
+		write(terminal, "1111\x1b[2;1H2222\x1b[3;1H3333\x1b[4;1H4444\x1b[2;1H\x1b[L")
+		So(terminal.Snapshot().Text(), ShouldEqual, "1111\n    \n2222\n3333")
+
+		terminal = newTerminal(4, 4)
+		write(terminal, "1111\x1b[2;1H2222\x1b[3;1H3333\x1b[4;1H4444\x1b[2;1H\x1b[M")
+		So(terminal.Snapshot().Text(), ShouldEqual, "1111\n3333\n4444\n    ")
+	})
+
 	Convey("DEC special graphics render line-drawing characters", t, func() {
 		terminal := newTerminal(6, 1)
 
