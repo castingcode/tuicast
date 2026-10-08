@@ -20,9 +20,10 @@ jobs:
       - name: Generate reference credentials
         shell: bash
         run: |
-          # Fresh random passwords for each run; nothing is committed.
+          # Fresh random passwords for each run; nothing is committed. Twelve
+          # bytes give 24 hex characters, the reference login field's limit.
           for name in TUICAST_REFERENCE_PASSWORD TUICAST_REFERENCE_APP_PASSWORD; do
-            value="$(openssl rand -hex 16)"
+            value="$(openssl rand -hex 12)"
             echo "::add-mask::$value"
             echo "$name=$value" >> "$GITHUB_ENV"
           done
@@ -243,9 +244,10 @@ jobs:
       - name: Generate reference credentials
         shell: bash
         run: |
-          # Fresh random passwords for each run; nothing is committed.
+          # Fresh random passwords for each run; nothing is committed. Twelve
+          # bytes give 24 hex characters, the reference login field's limit.
           for name in TUICAST_REFERENCE_PASSWORD TUICAST_REFERENCE_APP_PASSWORD; do
-            value="$(openssl rand -hex 16)"
+            value="$(openssl rand -hex 12)"
             echo "::add-mask::$value"
             echo "$name=$value" >> "$GITHUB_ENV"
           done
@@ -356,9 +358,10 @@ jobs:
       - name: Generate reference credentials
         shell: bash
         run: |
-          # Fresh random passwords for each run; nothing is committed.
+          # Fresh random passwords for each run; nothing is committed. Twelve
+          # bytes give 24 hex characters, the reference login field's limit.
           for name in TUICAST_REFERENCE_PASSWORD TUICAST_REFERENCE_APP_PASSWORD; do
-            value="$(openssl rand -hex 16)"
+            value="$(openssl rand -hex 12)"
             echo "::add-mask::$value"
             echo "$name=$value" >> "$GITHUB_ENV"
           done
@@ -473,9 +476,10 @@ jobs:
       - name: Generate reference credentials
         shell: bash
         run: |
-          # Fresh random passwords for each run; nothing is committed.
+          # Fresh random passwords for each run; nothing is committed. Twelve
+          # bytes give 24 hex characters, the reference login field's limit.
           for name in TUICAST_REFERENCE_PASSWORD TUICAST_REFERENCE_APP_PASSWORD; do
-            value="$(openssl rand -hex 16)"
+            value="$(openssl rand -hex 12)"
             echo "::add-mask::$value"
             echo "$name=$value" >> "$GITHUB_ENV"
           done

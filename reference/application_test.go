@@ -28,6 +28,15 @@ func TestApplication(t *testing.T) {
 		So(application.loginInputs[0].Focused(), ShouldBeTrue)
 	})
 
+	Convey("Credentials must fit the login screen's fields", t, func() {
+		So(testCredentials.Validate(), ShouldBeNil)
+		So(Credentials{Username: "operator"}.Validate(), ShouldNotBeNil)
+		tooLong := Credentials{Username: "operator", Password: strings.Repeat("x", loginFieldLimit+1)}
+		So(tooLong.Validate().Error(), ShouldContainSubstring, "at most 24 characters")
+		_, err := New(80, 24, tooLong)
+		So(err, ShouldNotBeNil)
+	})
+
 	Convey("Login supports focus navigation, validation, and function keys", t, func() {
 		application := newApplication()
 		application.Update(runes("wrong"))

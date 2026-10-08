@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -90,11 +91,26 @@ type Size struct {
 	Height int
 }
 
+// loginFieldLimit is the maximum length of the login screen's user ID and
+// password fields, as in many legacy WMS login screens.
+const loginFieldLimit = 24
+
 // Credentials are the user ID and password accepted by the application's
 // login screen.
 type Credentials struct {
 	Username string
 	Password string
+}
+
+// Validate reports whether the credentials can be entered on the login screen.
+func (c Credentials) Validate() error {
+	if c.Username == "" || c.Password == "" {
+		return fmt.Errorf("validating login credentials: username and password are required")
+	}
+	if utf8.RuneCountInString(c.Username) > loginFieldLimit || utf8.RuneCountInString(c.Password) > loginFieldLimit {
+		return fmt.Errorf("validating login credentials: username and password must be at most %d characters", loginFieldLimit)
+	}
+	return nil
 }
 
 // New creates a reference application with the requested terminal dimensions
@@ -103,21 +119,21 @@ func New(width, height int, credentials Credentials) (*Application, error) {
 	if width <= 0 || height <= 0 {
 		return nil, fmt.Errorf("creating reference TUI: dimensions must be positive")
 	}
-	if credentials.Username == "" || credentials.Password == "" {
-		return nil, fmt.Errorf("creating reference TUI: login username and password are required")
+	if err := credentials.Validate(); err != nil {
+		return nil, fmt.Errorf("creating reference TUI: %w", err)
 	}
 
 	username := textinput.New()
 	username.Prompt = ""
 	username.Placeholder = ""
-	username.CharLimit = 24
+	username.CharLimit = loginFieldLimit
 	username.SetWidth(min(24, max(8, width-12)))
 	password := textinput.New()
 	password.Prompt = ""
 	password.Placeholder = ""
 	password.EchoMode = textinput.EchoPassword
 	password.EchoCharacter = '*'
-	password.CharLimit = 24
+	password.CharLimit = loginFieldLimit
 	password.SetWidth(username.Width())
 	username.Focus()
 

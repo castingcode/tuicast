@@ -23,3 +23,9 @@ target/
 # Local environment files hold passwords and are never committed.
 .env.local
 .env.*.local
+
+# Outputs of local CI runs (task ci).
+/.bin/
+/coverage-root.*
+/sdk/go/coverage-sdk.*
+/sdk/typescript/coverage.txt

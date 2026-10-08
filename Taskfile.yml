@@ -1,0 +1,289 @@
+# Runs the CI jobs from .github/workflows/ci.yml locally. See https://taskfile.dev.
+#
+#   task             List the available tasks.
+#   task ci          Run every job below, in order.
+#   task check       "Format, vet, and test"
+#   task java        "Java 21 SDK and examples"
+#   task typescript  "TypeScript SDK and examples"
+#   task python      "Python SDK and examples"
+#
+# Reference fixtures listen on the addresses in .env; override them in
+# .env.local if those ports are busy. As in CI, each fixture run generates fresh
+# passwords unless .env.local sets them. Keep these tasks in step with ci.yml.
+version: '3'
+
+dotenv: ['.env.local', '.env']
+
+vars:
+  WITH_REFERENCE: '{{.ROOT_DIR}}/scripts/with-reference-fixture.sh'
+  PYTHON: '{{.ROOT_DIR}}/sdk/python/.venv/bin/python'
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list
+
+  ci:
+    desc: Run every CI job locally
+    cmds:
+      - task: check
+      - task: java
+      - task: typescript
+      - task: python
+
+  fixtures:
+    desc: Build the reference TUI and driver used by the example tests
+    cmds:
+      - mkdir -p .bin
+      - go build -o .bin/reference-tui ./cmd/reference-tui
+      - go build -o .bin/tuicast-driver ./cmd/tuicast-driver
+
+  # CI job: Format, vet, and test
+
+  check:
+    desc: 'CI job "Format, vet, and test"'
+    cmds:
+      - task: fmt
+      - task: installers
+      - task: release:check
+      - task: mod
+      - task: vet
+      - task: test
+      - task: go:examples
+      - task: npm-cli
+      - task: report:go
+      - task: coverage
+
+  fmt:
+    desc: Check gofmt formatting and whitespace errors
+    cmds:
+      - |
+        unformatted="$(gofmt -l $(git ls-files '*.go'))"
+        if [ -n "$unformatted" ]; then
+          echo "The following files are not formatted with gofmt:"
+          echo "$unformatted"
+          exit 1
+        fi
+      - git diff --check
+
+  installers:
+    desc: Check installer script syntax
+    cmds:
+      - sh -n install.sh
+      - |
+        if ! command -v pwsh >/dev/null; then
+          echo "WARNING: pwsh is not installed; skipping the install.ps1 syntax check that CI runs."
+          exit 0
+        fi
+        pwsh -NoProfile -Command '
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD "install.ps1"),
+            [ref]$tokens,
+            [ref]$errors
+          ) > $null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List | Out-String | Write-Error
+            exit 1
+          }
+        '
+
+  release:check:
+    desc: Check the GoReleaser configuration
+    preconditions:
+      - sh: command -v goreleaser
+        msg: GoReleaser v2 is required; see https://goreleaser.com/install/
+    cmds:
+      - goreleaser check
+
+  mod:
+    desc: Verify that all Go module files are tidy
+    cmds:
+      - go mod tidy
+      - go mod verify
+      - GOWORK=off go -C sdk/go mod tidy
+      - GOWORK=off go -C sdk/go mod verify
+      - GOWORK=off go -C examples/go mod tidy
+      - GOWORK=off go -C examples/go mod verify
+      - git diff --exit-code -- go.mod go.sum sdk/go/go.mod sdk/go/go.sum examples/go/go.mod examples/go/go.sum
+
+  vet:
+    desc: Vet the root, Go SDK, and Go examples modules
+    cmds:
+      - go vet ./...
+      - GOWORK=off go -C sdk/go vet ./...
+      - GOWORK=off go -C examples/go vet ./...
+
+  test:
+    desc: Test the root and Go SDK modules with race detection and coverage
+    cmds:
+      - go test -race -covermode=atomic -coverprofile=coverage-root.out ./...
+      - GOWORK=off go -C sdk/go test -race -covermode=atomic -coverprofile=coverage-sdk.out ./...
+
+  go:examples:
+    desc: Test the Go reference and Cucumber examples against the reference TUI
+    cmds:
+      - task: fixtures
+      - GOWORK=off "{{.WITH_REFERENCE}}" go -C examples/go test -race ./reference
+      - mkdir -p cucumber-reports/json
+      - >-
+        GOWORK=off
+        TUICAST_CUCUMBER_FORMAT="pretty,cucumber:{{.ROOT_DIR}}/cucumber-reports/json/cucumber.json"
+        "{{.WITH_REFERENCE}}" go -C examples/go test -race ./cucumber
+
+  npm-cli:
+    desc: Test the npm CLI installer
+    dir: npm/cli
+    cmds:
+      - npm ci --ignore-scripts
+      - npm test
+      - npm run pack:check
+
+  report:go:
+    desc: Generate the Go Cucumber HTML report
+    cmds:
+      - npm ci --prefix examples/reporting
+      - npm --prefix examples/reporting run cucumber-report -- "{{.ROOT_DIR}}/cucumber-reports/json" "{{.ROOT_DIR}}/cucumber-reports/html"
+
+  coverage:
+    desc: Generate Go coverage reports
+    cmds:
+      - go tool cover -func=coverage-root.out > coverage-root.txt
+      - go tool cover -html=coverage-root.out -o coverage-root.html
+      - cd sdk/go && go tool cover -func=coverage-sdk.out > coverage-sdk.txt
+      - cd sdk/go && go tool cover -html=coverage-sdk.out -o coverage-sdk.html
+      - |
+        echo "Coverage:"
+        echo "- Root module: $(tail -n 1 coverage-root.txt | awk '{print $NF}')"
+        echo "- Go SDK: $(tail -n 1 sdk/go/coverage-sdk.txt | awk '{print $NF}')"
+
+  # CI job: Java 21 SDK and examples
+
+  java:
+    desc: 'CI job "Java 21 SDK and examples"'
+    preconditions:
+      - sh: command -v mvn
+        msg: Maven and Java 21 are required; see https://maven.apache.org/install.html
+    cmds:
+      - task: java:sdk
+      - task: fixtures
+      - task: java:examples
+      - task: report:java
+
+  java:sdk:
+    desc: Verify the Java SDK and install it for the examples
+    dir: sdk/java
+    cmds:
+      - mvn --batch-mode install
+
+  java:examples:
+    desc: Test the Java reference and Cucumber examples against the reference TUI
+    dir: examples/java
+    cmds:
+      - '"{{.WITH_REFERENCE}}" mvn --batch-mode verify'
+      - '"{{.WITH_REFERENCE}}" mvn --batch-mode test -Pcucumber'
+
+  report:java:
+    desc: Generate the Java Cucumber HTML report
+    cmds:
+      - |
+        if [ ! -s examples/java/target/cucumber.json ]; then
+          echo "WARNING: the Java Cucumber JSON report was not generated"
+          exit 0
+        fi
+        mkdir -p cucumber-reports/java/json cucumber-reports/java/html
+        cp examples/java/target/cucumber.json cucumber-reports/java/json/cucumber.json
+        npm ci --prefix examples/reporting
+        npm --prefix examples/reporting run cucumber-report -- "{{.ROOT_DIR}}/cucumber-reports/java/json" "{{.ROOT_DIR}}/cucumber-reports/java/html"
+
+  # CI job: TypeScript SDK and examples
+
+  typescript:
+    desc: 'CI job "TypeScript SDK and examples"'
+    cmds:
+      - task: typescript:sdk
+      - task: typescript:examples
+      - task: fixtures
+      - task: typescript:reference
+      - task: report:typescript
+
+  typescript:sdk:
+    desc: Verify the TypeScript SDK
+    dir: sdk/typescript
+    cmds:
+      - npm ci
+      - npm run format:check
+      - npm run typecheck
+      - npm run pack:check
+      - set -o pipefail; npm run test:coverage | tee coverage.txt
+
+  typescript:examples:
+    desc: Check formatting and types of the TypeScript examples
+    dir: examples/typescript
+    cmds:
+      - npm ci
+      - npm run format:check
+      - npm run typecheck
+
+  typescript:reference:
+    desc: Test the TypeScript reference and Cucumber examples against the reference TUI
+    dir: examples/typescript
+    cmds:
+      - '"{{.WITH_REFERENCE}}" npm run reference'
+      - '"{{.WITH_REFERENCE}}" npm run cucumber:report'
+
+  report:typescript:
+    desc: Generate the TypeScript Cucumber HTML report
+    cmds:
+      - |
+        if [ ! -s cucumber-reports/json/typescript.json ]; then
+          echo "WARNING: the TypeScript Cucumber JSON report was not generated"
+          exit 0
+        fi
+        npm ci --prefix examples/reporting
+        npm --prefix examples/reporting run cucumber-report -- "{{.ROOT_DIR}}/cucumber-reports/json" "{{.ROOT_DIR}}/cucumber-reports/typescript-html"
+
+  # CI job: Python SDK and examples
+
+  python:
+    desc: 'CI job "Python SDK and examples"'
+    cmds:
+      - task: python:venv
+      - task: python:sdk
+      - task: fixtures
+      - task: python:examples
+
+  python:venv:
+    desc: Create or update the Python SDK virtual environment
+    preconditions:
+      - sh: command -v python3.12
+        msg: Python 3.12 is required
+    cmds:
+      - test -x "{{.PYTHON}}" || python3.12 -m venv sdk/python/.venv
+      - '"{{.PYTHON}}" -m pip install --quiet --upgrade pip'
+      - '"{{.PYTHON}}" -m pip install --quiet -e "sdk/python[dev]"'
+
+  python:sdk:
+    desc: Verify the Python SDK and examples
+    cmds:
+      - '"{{.PYTHON}}" -m ruff format --check sdk/python examples/python'
+      - '"{{.PYTHON}}" -m ruff check sdk/python examples/python'
+      - '"{{.PYTHON}}" -m mypy --config-file sdk/python/pyproject.toml sdk/python/src'
+      - >-
+        "{{.PYTHON}}" -m pytest -c sdk/python/pyproject.toml sdk/python/tests
+        --cov-report=xml:sdk/python/coverage.xml
+        --cov-report=html:sdk/python/htmlcov
+      - '"{{.PYTHON}}" -m build sdk/python'
+
+  python:examples:
+    desc: Test the Python reference and Cucumber examples against the reference TUI
+    cmds:
+      - '"{{.WITH_REFERENCE}}" "{{.PYTHON}}" -m pytest -c sdk/python/pyproject.toml --no-cov -m reference examples/python/reference'
+      - mkdir -p cucumber-reports/python
+      - '"{{.WITH_REFERENCE}}" "{{.PYTHON}}" examples/python/cucumber/run.py --outfile="{{.ROOT_DIR}}/cucumber-reports/python/cucumber.json"'
+      - >-
+        "{{.PYTHON}}" examples/python/cucumber/report.py
+        "{{.ROOT_DIR}}/cucumber-reports/python/cucumber.json"
+        "{{.ROOT_DIR}}/cucumber-reports/python/cucumber.html"

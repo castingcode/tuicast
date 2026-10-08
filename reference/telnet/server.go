@@ -39,8 +39,8 @@ func Serve(ctx context.Context, listener net.Listener, login reference.Credentia
 	if listener == nil {
 		return fmt.Errorf("serving reference TUI over Telnet: listener is required")
 	}
-	if login.Username == "" || login.Password == "" {
-		return fmt.Errorf("serving reference TUI over Telnet: application login username and password are required")
+	if err := login.Validate(); err != nil {
+		return fmt.Errorf("serving reference TUI over Telnet: %w", err)
 	}
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))

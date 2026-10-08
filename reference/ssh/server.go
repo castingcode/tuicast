@@ -38,8 +38,8 @@ func Serve(ctx context.Context, listener net.Listener, config Config) error {
 			return fmt.Errorf("serving reference TUI over SSH: usernames and passwords must not be empty")
 		}
 	}
-	if config.Login.Username == "" || config.Login.Password == "" {
-		return fmt.Errorf("serving reference TUI over SSH: application login username and password are required")
+	if err := config.Login.Validate(); err != nil {
+		return fmt.Errorf("serving reference TUI over SSH: %w", err)
 	}
 	if config.Signer == nil {
 		return fmt.Errorf("serving reference TUI over SSH: host signer is required")

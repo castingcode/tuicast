@@ -23,6 +23,9 @@ preferred because command-line arguments are visible to other local users:
 | SSH user name | `-ssh-username` | | `operator` |
 | SSH password | `-ssh-password` | `TUICAST_REFERENCE_PASSWORD` | none; required for SSH unless `-ssh-users-file` is used |
 
+The application user ID and password must each fit the login screen's
+24-character fields; longer values are rejected at startup.
+
 Developers keep the passwords in the repository's Git-ignored `.env.local`,
 created from the committed `.env.example`, and load it together with the
 committed non-secret `.env` before running the fixture or the examples:

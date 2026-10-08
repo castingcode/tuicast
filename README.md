@@ -287,7 +287,7 @@ set -a; . ./.env; . ./.env.local; set +a
 | Variable | Purpose |
 | --- | --- |
 | `TUICAST_REFERENCE_PASSWORD` | SSH password; required with `--ssh-address` |
-| `TUICAST_REFERENCE_APP_PASSWORD` | Password accepted by the application's login screen; always required |
+| `TUICAST_REFERENCE_APP_PASSWORD` | Password accepted by the application's login screen, at most 24 characters; always required |
 
 The SSH and application user IDs default to `operator`. For ease of demonstration, the login
 screen displays the configured application credentials. The examples and getting-started guides
@@ -359,3 +359,20 @@ brew install vttest
 ```
 
 On Linux, install `vttest` through your distribution’s package manager.
+
+## Running CI Checks Locally
+
+The [Taskfile](Taskfile.yml) runs the same checks as the CI pipeline. Install
+[Task](https://taskfile.dev/installation/), then run all jobs or one at a time:
+
+```sh
+task ci          # every job below, in order
+task check       # Go formatting, vet, tests, Go examples, and the npm CLI installer
+task java        # Java SDK and examples (requires Maven and Java 21)
+task typescript  # TypeScript SDK and examples
+task python      # Python SDK and examples (requires Python 3.12)
+```
+
+Run `task` to list the individual steps. The example tests start the reference TUI on the addresses
+in `.env`; set different addresses in `.env.local` if those ports are busy. As in CI, each run
+generates fresh passwords unless `.env.local` provides them.

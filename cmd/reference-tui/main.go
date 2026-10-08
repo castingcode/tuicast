@@ -91,6 +91,9 @@ func run(ctx context.Context, arguments []string, getenv func(string) string, in
 	if login.Username == "" || login.Password == "" {
 		return fmt.Errorf("configuring reference TUI: application login password is required; set %s (see .env.example) or -app-password", appPasswordVariable)
 	}
+	if err := login.Validate(); err != nil {
+		return fmt.Errorf("configuring reference TUI: %w", err)
+	}
 	if *sshAddress != "" {
 		password := valueOrEnvironment(*sshPassword, getenv, sshPasswordVariable)
 		if *sshUsersFile == "" && password == "" {
