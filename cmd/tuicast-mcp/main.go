@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/castingcode/tuicast"
@@ -36,6 +37,7 @@ func run(ctx context.Context, arguments []string, input io.ReadCloser, output io
 	flags := flag.NewFlagSet("tuicast-mcp", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	configPath := flags.String("config", "", "path to a TUICast MCP profile configuration file")
+	secretCommand := flags.String("secret-command", "", "executable that prints a named secret; used when neither NAME nor NAME_FILE is set")
 	var showHelp, showVersion bool
 	flags.BoolVar(&showHelp, "help", false, "show this help and exit")
 	flags.BoolVar(&showHelp, "h", false, "shorthand for -help")
@@ -63,7 +65,14 @@ func run(ctx context.Context, arguments []string, input io.ReadCloser, output io
 	if *configPath == "" {
 		return fmt.Errorf("configuring TUICast MCP server: -config is required")
 	}
-	profiles, err := loadProfiles(*configPath, logger)
+	if *secretCommand != "" {
+		resolved, err := exec.LookPath(*secretCommand)
+		if err != nil {
+			return fmt.Errorf("configuring TUICast MCP secret command: %w", err)
+		}
+		*secretCommand = resolved
+	}
+	profiles, err := loadProfiles(*configPath, *secretCommand, logger)
 	if err != nil {
 		return err
 	}

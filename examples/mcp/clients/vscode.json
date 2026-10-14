@@ -5,9 +5,10 @@
       "command": "tuicast-mcp",
       "args": [
         "-config",
-        "${workspaceFolder}/examples/mcp/reference-profile.json"
-      ],
-      "envFile": "${workspaceFolder}/.env.local"
+        "${workspaceFolder}/examples/mcp/reference-profile.json",
+        "-secret-command",
+        "${workspaceFolder}/examples/mcp/env-local-secret.sh"
+      ]
     }
   }
 }

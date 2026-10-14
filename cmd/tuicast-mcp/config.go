@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,6 +26,8 @@ const (
 	defaultConnectTimeout = 30 * time.Second
 	maximumConnectTimeout = 10 * time.Minute
 	maximumDimension      = 1000
+	secretCommandTimeout  = time.Minute
+	maximumSecretBytes    = 64 << 10
 )
 
 type profileFile struct {
@@ -50,7 +55,7 @@ type sshConfig struct {
 	ConnectTimeoutMilliseconds int    `json:"connectTimeoutMilliseconds,omitempty"`
 }
 
-func loadProfiles(path string, logger *slog.Logger) ([]mcpserver.Profile, error) {
+func loadProfiles(path, secretCommand string, logger *slog.Logger) ([]mcpserver.Profile, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("opening TUICast MCP config: %w", err)
@@ -73,7 +78,7 @@ func loadProfiles(path string, logger *slog.Logger) ([]mcpserver.Profile, error)
 	baseDirectory := filepath.Dir(path)
 	profiles := make([]mcpserver.Profile, 0, len(config.Profiles))
 	for name, configured := range config.Profiles {
-		profile, err := makeProfile(name, configured, baseDirectory, logger)
+		profile, err := makeProfile(name, configured, baseDirectory, secretCommand, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -93,7 +98,7 @@ func requireJSONEnd(decoder *json.Decoder) error {
 	return nil
 }
 
-func makeProfile(name string, configured profileConfig, baseDirectory string, logger *slog.Logger) (mcpserver.Profile, error) {
+func makeProfile(name string, configured profileConfig, baseDirectory, secretCommand string, logger *slog.Logger) (mcpserver.Profile, error) {
 	if strings.TrimSpace(name) == "" || strings.TrimSpace(name) != name {
 		return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP config: profile name %q is invalid", name)
 	}
@@ -120,7 +125,7 @@ func makeProfile(name string, configured profileConfig, baseDirectory string, lo
 		if configured.SSH == nil {
 			return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP profile %q: ssh settings are required", name)
 		}
-		connector, err = makeSSHConnector(name, configured.Address, *configured.SSH, baseDirectory, logger)
+		connector, err = makeSSHConnector(name, configured.Address, *configured.SSH, baseDirectory, secretCommand, logger)
 	default:
 		return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP profile %q: unsupported protocol %q", name, configured.Protocol)
 	}
@@ -133,17 +138,17 @@ func makeProfile(name string, configured profileConfig, baseDirectory string, lo
 	}, nil
 }
 
-func makeSSHConnector(profileName, address string, configured sshConfig, baseDirectory string, logger *slog.Logger) (tuicast.Connector, error) {
+func makeSSHConnector(profileName, address string, configured sshConfig, baseDirectory, secretCommand string, logger *slog.Logger) (tuicast.Connector, error) {
 	if configured.Username == "" {
 		return nil, fmt.Errorf("validating TUICast MCP profile %q: SSH username is required", profileName)
 	}
 	var authentication []gossh.AuthMethod
 	if configured.PasswordEnv != "" {
-		password, err := requiredEnvironment(configured.PasswordEnv)
+		password, err := resolveSecret(profileName, "SSH password", configured.PasswordEnv, secretCommand, logger)
 		if err != nil {
-			return nil, fmt.Errorf("loading TUICast MCP profile %q SSH password: %w", profileName, err)
+			return nil, err
 		}
-		authentication = append(authentication, gossh.Password(password))
+		authentication = append(authentication, gossh.PasswordCallback(password.get))
 	}
 	if configured.PrivateKeyFile != "" {
 		keyPath := resolvePath(baseDirectory, configured.PrivateKeyFile)
@@ -151,20 +156,38 @@ func makeSSHConnector(profileName, address string, configured sshConfig, baseDir
 		if err != nil {
 			return nil, fmt.Errorf("reading TUICast MCP profile %q SSH private key: %w", profileName, err)
 		}
-		var signer gossh.Signer
 		if configured.PrivateKeyPassphraseEnv == "" {
-			signer, err = gossh.ParsePrivateKey(privateKey)
-		} else {
-			passphrase, envErr := requiredEnvironment(configured.PrivateKeyPassphraseEnv)
-			if envErr != nil {
-				return nil, fmt.Errorf("loading TUICast MCP profile %q SSH key passphrase: %w", profileName, envErr)
+			signer, err := gossh.ParsePrivateKey(privateKey)
+			if err != nil {
+				return nil, fmt.Errorf("parsing TUICast MCP profile %q SSH private key: %w", profileName, err)
 			}
-			signer, err = gossh.ParsePrivateKeyWithPassphrase(privateKey, []byte(passphrase))
+			authentication = append(authentication, gossh.PublicKeys(signer))
+		} else {
+			passphrase, err := resolveSecret(profileName, "SSH key passphrase", configured.PrivateKeyPassphraseEnv, secretCommand, logger)
+			if err != nil {
+				return nil, err
+			}
+			signers := func() ([]gossh.Signer, error) {
+				value, err := passphrase.get()
+				if err != nil {
+					return nil, err
+				}
+				signer, err := gossh.ParsePrivateKeyWithPassphrase(privateKey, []byte(value))
+				if err != nil {
+					return nil, fmt.Errorf("parsing TUICast MCP profile %q SSH private key: %w", profileName, err)
+				}
+				return []gossh.Signer{signer}, nil
+			}
+			if passphrase.deferred {
+				authentication = append(authentication, gossh.PublicKeysCallback(signers))
+			} else {
+				parsed, err := signers()
+				if err != nil {
+					return nil, err
+				}
+				authentication = append(authentication, gossh.PublicKeys(parsed...))
+			}
 		}
-		if err != nil {
-			return nil, fmt.Errorf("parsing TUICast MCP profile %q SSH private key: %w", profileName, err)
-		}
-		authentication = append(authentication, gossh.PublicKeys(signer))
 	} else if configured.PrivateKeyPassphraseEnv != "" {
 		return nil, fmt.Errorf("validating TUICast MCP profile %q: privateKeyPassphraseEnv requires privateKeyFile", profileName)
 	}
@@ -232,10 +255,114 @@ func makeHostKeyCallback(profileName string, configured sshConfig, baseDirectory
 	}
 }
 
-func requiredEnvironment(name string) (string, error) {
-	value, ok := os.LookupEnv(name)
-	if !ok || value == "" {
-		return "", fmt.Errorf("reading environment variable %q: value is required", name)
+// secret yields one credential. Values from the environment or a file are
+// read at startup. A secret command runs on each connection attempt instead,
+// so it can wait for an unlock prompt or return a rotated credential without
+// delaying the MCP handshake.
+type secret struct {
+	get      func() (string, error)
+	deferred bool
+}
+
+// resolveSecret finds the secret named name in a fixed order: the NAME
+// environment variable, then the file named by NAME_FILE, then the secret
+// command, which receives name as its only argument. Empty variables count as
+// unset. Only the source is logged, never the value.
+func resolveSecret(profileName, purpose, name, secretCommand string, logger *slog.Logger) (secret, error) {
+	fileVariable := name + "_FILE"
+	value, path := os.Getenv(name), os.Getenv(fileVariable)
+	var resolved secret
+	var source string
+	switch {
+	case value != "" && path != "":
+		return secret{}, fmt.Errorf("loading TUICast MCP profile %q %s: environment variables %q and %q are both set; set only one", profileName, purpose, name, fileVariable)
+	case value != "":
+		resolved, source = staticSecret(value), "environment"
+	case path != "":
+		contents, err := readSecretFile(path)
+		if err != nil {
+			return secret{}, fmt.Errorf("loading TUICast MCP profile %q %s from %s: %w", profileName, purpose, fileVariable, err)
+		}
+		resolved, source = staticSecret(contents), "file"
+	case secretCommand != "":
+		source = "command"
+		resolved = secret{deferred: true, get: func() (string, error) {
+			value, err := runSecretCommand(secretCommand, name)
+			if err != nil {
+				logger.Warn("TUICast MCP secret command failed", "profile", profileName, "secret", name, "error", err)
+				return "", fmt.Errorf("loading TUICast MCP profile %q %s: %w", profileName, purpose, err)
+			}
+			return value, nil
+		}}
+	default:
+		return secret{}, fmt.Errorf("loading TUICast MCP profile %q %s: environment variable %q is not set; set it, set %q to the path of a file containing it, or start tuicast-mcp with -secret-command", profileName, purpose, name, fileVariable)
+	}
+	logger.Info("TUICast MCP profile secret configured", "profile", profileName, "secret", name, "source", source)
+	return resolved, nil
+}
+
+func staticSecret(value string) secret {
+	return secret{get: func() (string, error) { return value, nil }}
+}
+
+func readSecretFile(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("opening secret file: %w", err)
+	}
+	defer file.Close()
+	contents, err := io.ReadAll(io.LimitReader(file, maximumSecretBytes+1))
+	if err != nil {
+		return "", fmt.Errorf("reading secret file: %w", err)
+	}
+	return trimSecret(contents)
+}
+
+func runSecretCommand(command, name string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), secretCommandTimeout)
+	defer cancel()
+	// Stdin stays nil, so the command reads the null device and cannot consume
+	// MCP protocol messages from this process's standard input. Output
+	// captures stdout rather than letting it corrupt the protocol stream.
+	cmd := exec.CommandContext(ctx, command, name)
+	cmd.WaitDelay = time.Second
+	output, err := cmd.Output()
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("running secret command for %q: timed out after %s", name, secretCommandTimeout)
+	}
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if message := strings.TrimSpace(string(exitErr.Stderr)); message != "" {
+				if len(message) > 512 {
+					message = message[:512] + "..."
+				}
+				return "", fmt.Errorf("running secret command for %q: %w: %s", name, err, message)
+			}
+		}
+		return "", fmt.Errorf("running secret command for %q: %w", name, err)
+	}
+	value, err := trimSecret(output)
+	if err != nil {
+		return "", fmt.Errorf("reading secret command output for %q: %w", name, err)
+	}
+	return value, nil
+}
+
+// trimSecret removes one trailing line ending. Other whitespace is kept
+// because it can be part of a password.
+func trimSecret(raw []byte) (string, error) {
+	if len(raw) > maximumSecretBytes {
+		return "", fmt.Errorf("secret exceeds %d bytes", maximumSecretBytes)
+	}
+	value := string(raw)
+	if strings.HasSuffix(value, "\r\n") {
+		value = value[:len(value)-2]
+	} else {
+		value = strings.TrimSuffix(value, "\n")
+	}
+	if value == "" {
+		return "", fmt.Errorf("secret is empty")
 	}
 	return value, nil
 }

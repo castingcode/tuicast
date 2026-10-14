@@ -58,10 +58,21 @@ If the server log reports `spawn tuicast-mcp ENOENT`, set `command` to the
 absolute path printed by `command -v tuicast-mcp`, such as
 `/Users/you/go/bin/tuicast-mcp`.
 
-The template loads `TUICAST_REFERENCE_PASSWORD` from the workspace's
-Git-ignored `.env.local` with `envFile`. This keeps the password out of the
-configuration file and also works for Copilot CLI (Agent Host) chat sessions,
-which do not support servers that use `${input:...}` prompts.
+The template passes
+[`env-local-secret.sh`](env-local-secret.sh) to `tuicast-mcp` as its
+`-secret-command`. Because `TUICAST_REFERENCE_PASSWORD` is not set in the
+server's environment, `tuicast-mcp` runs the script with that name, and the
+script prints the value from the workspace's Git-ignored `.env.local`. This
+keeps the password out of the configuration file and works in Agent Host chat
+sessions. Those sessions don't apply `envFile`, and VS Code does not forward
+servers that use `${input:...}` prompts to them. If you copy the template into
+another workspace, copy the script to `examples/mcp/` there as well. The
+script requires a POSIX shell; on Windows, provide the password through `env`
+as in the Cursor template.
+
+Errors from Agent Host sessions do not appear in the `MCP: tuicast-reference`
+output channel. Run **Developer: Open Logs Folder** and read
+`window1/agentHostMcpServer.*.log` in the newest folder.
 
 ### Cursor
 
@@ -104,7 +115,8 @@ press keys, record a replayable workflow, and close resources.
 It cannot supply an arbitrary hostname, port, username, credential, terminal
 profile, or screen size. Those values remain in
 [`reference-profile.json`](reference-profile.json), outside the model's tool
-arguments, and credentials are loaded from the named environment variable.
+arguments, and credentials are loaded by name from the environment, a file, or
+the operator's secret command.
 
 See [`design/mcp.md`](../../design/mcp.md) for the full tool and security
 contract.

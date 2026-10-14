@@ -11,11 +11,11 @@ profile, or screen dimensions. An operator defines these values in named
 profiles. MCP tools accept only a profile name, and `tuicast_list_profiles`
 returns descriptive metadata without endpoint addresses or credential fields.
 
-SSH passwords and private-key passphrases are read from environment variables.
-Private keys and known-hosts data are read from configured files. Secret values
-are neither returned by tools nor included in TUICast logs. Host-key validation
-is mandatory unless the operator explicitly enables the insecure option, which
-emits a warning at startup.
+Profiles name SSH passwords and private-key passphrases rather than containing
+them; see [Secrets](#secrets). Private keys and known-hosts data are read from
+configured files. Secret values are neither returned by tools nor included in
+TUICast logs. Host-key validation is mandatory unless the operator explicitly
+enables the insecure option, which emits a warning at startup.
 
 MCP stdio must remain reserved for protocol messages. Logs are written to
 standard error.
@@ -26,6 +26,12 @@ Start the server with a configuration file:
 
 ```sh
 TUICAST_WMS_PASSWORD='...' tuicast-mcp -config ./tuicast-mcp.json
+```
+
+Or let a command supply secrets that are not in the environment:
+
+```sh
+tuicast-mcp -config ./tuicast-mcp.json -secret-command ./wms-secret
 ```
 
 Example:
@@ -62,6 +68,56 @@ Example:
 Relative private-key and known-hosts paths are resolved from the configuration
 file's directory. The authoritative format is
 `schema/mcp-profiles.schema.json`; runtime decoding also rejects unknown fields.
+
+## Secrets
+
+`passwordEnv` and `privateKeyPassphraseEnv` name a secret, such as
+`TUICAST_WMS_PASSWORD`. `tuicast-mcp` resolves each named secret in a fixed
+order:
+
+1. The `NAME` environment variable.
+2. The file whose path is in the `NAME_FILE` environment variable, following
+   the convention of Docker official images. Setting both `NAME` and
+   `NAME_FILE` is an error.
+3. The executable given by the `-secret-command` flag, run as
+   `<command> NAME`. Its standard output is the secret.
+
+Empty variables count as unset. If no source supplies the secret, startup fails
+with an error that names all three options. One trailing `\n` or `\r\n` is
+removed from file contents and command output; other whitespace is kept because
+it can be part of a password. Secrets larger than 64 KiB or empty are rejected.
+
+The order lets a profile be shared while each deployment chooses how to supply
+its secrets: environment variables in CI, `_FILE` with Docker or Kubernetes
+secrets, and a command that reads a password manager or the operating system's
+keychain on a workstation. Only the operator who starts the server chooses the
+command; a profile cannot, so a profile from a cloned repository cannot run
+programs. The command is a flag rather than a profile field for that reason,
+and because MCP clients forward command-line arguments reliably. VS Code's
+Agent Host sessions, for example, do not apply `envFile`.
+
+`NAME` and `NAME_FILE` are read at startup. The secret command runs on every
+connection attempt instead. It can wait for an unlock prompt without delaying
+the MCP handshake, returns rotated credentials without a restart, and keeps the
+secret in memory only while authenticating. At startup, `tuicast-mcp` only
+checks that the command can be found. The command:
+
+- receives the secret name as its only argument and inherits the server's
+  environment;
+- reads standard input from the null device, so it cannot consume MCP protocol
+  messages, and its standard output is captured, so it cannot corrupt them;
+- is stopped after one minute.
+
+A failed command fails the connection. The error and a `Warn` log include the
+exit status and the command's standard error, never its standard output. At
+startup, an `Info` log records which source supplied each secret.
+
+Example command for 1Password:
+
+```sh
+#!/bin/sh
+exec op read "op://WMS/$1/password"
+```
 
 ## Tools
 
