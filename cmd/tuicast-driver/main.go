@@ -44,6 +44,7 @@ func run(arguments []string, input io.Reader, output io.Writer, logger *slog.Log
 	flags.SetOutput(io.Discard)
 	uiAddress := flags.String("ui-address", "", "TUICast Inspector listen address (for example 127.0.0.1:0)")
 	workbenchEnabled := flags.Bool("workbench", false, "enable TUICast Workbench on the loopback Inspector listener")
+	dumpDirectory := flags.String("dump-dir", "", "write a flight-recorder dump file to this directory for each failed wait")
 	var showHelp, showVersion bool
 	flags.BoolVar(&showHelp, "help", false, "show this help and exit")
 	flags.BoolVar(&showHelp, "h", false, "shorthand for -help")
@@ -75,7 +76,11 @@ func run(arguments []string, input io.Reader, output io.Writer, logger *slog.Log
 		return fmt.Errorf("configuring TUICast Workbench: -ui-address must be a loopback address")
 	}
 
-	server, err := driver.New(logger, connector, terminal)
+	var driverOptions []driver.Option
+	if *dumpDirectory != "" {
+		driverOptions = append(driverOptions, driver.WithDumpDirectory(*dumpDirectory))
+	}
+	server, err := driver.New(logger, connector, terminal, driverOptions...)
 	if err != nil {
 		return fmt.Errorf("initializing TUICast driver: %w", err)
 	}

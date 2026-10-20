@@ -34,7 +34,7 @@ func TestMCPProtocol(t *testing.T) {
 
 		tools, err := clientSession.ListTools(context.Background(), nil)
 		So(err, ShouldBeNil)
-		So(tools.Tools, ShouldHaveLength, 15)
+		So(tools.Tools, ShouldHaveLength, 16)
 		names := make([]string, 0, len(tools.Tools))
 		for _, tool := range tools.Tools {
 			names = append(names, tool.Name)
@@ -46,6 +46,7 @@ func TestMCPProtocol(t *testing.T) {
 		So(names, ShouldContain, "tuicast_wait_for_idle")
 		So(names, ShouldContain, "tuicast_wait_for_end")
 		So(names, ShouldContain, "tuicast_events")
+		So(names, ShouldContain, "tuicast_failure_dump")
 		So(names, ShouldContain, "tuicast_start_recording")
 		So(names, ShouldContain, "tuicast_stop_recording")
 		So(names, ShouldContain, "tuicast_close_connection")
@@ -103,6 +104,17 @@ func TestMCPProtocol(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(result.IsError, ShouldBeTrue)
 		So(result.Content[0].(*mcp.TextContent).Text, ShouldContainSubstring, "session end")
+
+		result, err = clientSession.CallTool(context.Background(), &mcp.CallToolParams{
+			Name: "tuicast_failure_dump", Arguments: map[string]any{"sessionId": session.SessionID},
+		})
+		So(err, ShouldBeNil)
+		So(result.IsError, ShouldBeFalse)
+		var dump mcpserver.FailureDumpInfo
+		decodeStructured(result, &dump)
+		So(dump.Expected, ShouldEqual, "session end")
+		So(dump.Records, ShouldNotBeEmpty)
+		So(dump.Records[0].Text, ShouldStartWith, "MCP READY")
 
 		result, err = clientSession.CallTool(context.Background(), &mcp.CallToolParams{
 			Name: "tuicast_events", Arguments: map[string]any{"sessionId": session.SessionID, "afterSequence": 0},

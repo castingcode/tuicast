@@ -5,7 +5,10 @@ thin synchronous client for protocol v1 over a child `tuicast-driver` process.
 It provides typed SSH/Telnet configuration and `Driver`, `Connection`, and
 `Session` context managers. Driver-side waits preserve timing semantics;
 detached immutable `Screen` values provide local queries. `Session.state()` and
-`Session.wait_for_end()` report when the host ends a session.
+`Session.wait_for_end()` report when the host ends a session. A failed wait
+raises `WaitError` with the last screen and `dump`, the flight-recorder dump of
+the host output that preceded the failure (`dump_path` names a file copy when
+the driver runs with `-dump-dir`).
 
 ## Mandatory development environment
 

@@ -33,6 +33,7 @@ func TestInspector(t *testing.T) {
 		So(state.Header().Get("Cache-Control"), ShouldEqual, "no-store")
 		So(state.Body.String(), ShouldContainSubstring, `"protocol":"ssh"`)
 		So(state.Body.String(), ShouldContainSubstring, `"terminal":"vt220"`)
+		So(state.Body.String(), ShouldContainSubstring, `"unsupported":[{"sequence":"CSI ? 1049 h","count":3}]`)
 	})
 
 	Convey("Readiness fails after the driver closes while liveness remains healthy", t, func() {
@@ -143,6 +144,7 @@ func populatedSnapshot() driver.Snapshot {
 		}},
 		Sessions: []driver.SessionSnapshot{{
 			ID: 9, ConnectionID: 3, Terminal: "vt220", Width: 80, Height: 24, Revision: 7, State: "active",
+			Unsupported: []driver.UnsupportedSnapshot{{Sequence: "CSI ? 1049 h", Count: 3}},
 		}},
 	}
 }

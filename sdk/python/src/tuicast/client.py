@@ -44,11 +44,22 @@ class RPCError(TUICastError):
 
 
 class WaitError(RPCError):
+    """A failed wait.
+
+    ``dump`` is the driver's flight-recorder dump in JSON-lines trace format:
+    the most recent host output (up to 64 KiB) with timing and screen
+    revisions, unsupported-sequence counts, and the failure. Save it with a
+    test report to diagnose the failure later. ``dump_path`` is the file
+    holding the same dump when the driver runs with ``-dump-dir``.
+    """
+
     def __init__(self, code: int, message: str, data: Mapping[str, Any]):
         super().__init__(code, message, data)
         self.kind = str(data.get("kind", ""))
         self.expected = str(data.get("expected", ""))
         self.last_screen = Screen.from_dict(data["screen"])
+        self.dump: str | None = data.get("dump")
+        self.dump_path: str | None = data.get("dumpPath")
 
 
 def is_timeout(error: BaseException) -> bool:

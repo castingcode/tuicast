@@ -32,6 +32,16 @@ type SessionSnapshot struct {
 	Revision     uint64 `json:"revision"`
 	State        string `json:"state"`
 	Error        string `json:"error,omitempty"`
+	// Unsupported counts the sequences the terminal ignored, in the order they
+	// first appeared. Sequences are named in notation such as "CSI ? 2004 h"
+	// and never include control-string content.
+	Unsupported []UnsupportedSnapshot `json:"unsupported"`
+}
+
+// UnsupportedSnapshot counts one sequence the session's terminal ignored.
+type UnsupportedSnapshot struct {
+	Sequence string `json:"sequence"`
+	Count    uint64 `json:"count"`
 }
 
 type snapshotSession struct {
@@ -79,6 +89,10 @@ func (s *Server) DriverSnapshot() Snapshot {
 	for _, registered := range sessions {
 		screen := registered.session.Screen()
 		state := makeSessionStateResult(registered.session)
+		unsupported := make([]UnsupportedSnapshot, 0)
+		for _, sequence := range registered.session.UnsupportedSequences() {
+			unsupported = append(unsupported, UnsupportedSnapshot{Sequence: sequence.Sequence, Count: sequence.Count})
+		}
 		result.Sessions = append(result.Sessions, SessionSnapshot{
 			ID:           registered.id,
 			ConnectionID: registered.connectionID,
@@ -88,6 +102,7 @@ func (s *Server) DriverSnapshot() Snapshot {
 			Revision:     screen.Revision,
 			State:        state.State,
 			Error:        state.Error,
+			Unsupported:  unsupported,
 		})
 	}
 	return result

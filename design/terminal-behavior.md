@@ -36,12 +36,15 @@ creating that representation.
 A profile ignores sequences it does not implement without writing their bytes
 to the screen, and reports each one as an `unsupported` terminal event whose
 data names the sequence in conventional notation, such as `CSI ? 2004 h`,
-`CSI 38;2 m`, `ESC # 8`, `OSC 52`, `DCS 1 $ q`, `APC`, or `C1 0x84`. The session
-also logs it at `Warn` with the session and connection identifiers.
+`CSI 38;2 m`, `ESC # 8`, `OSC 52`, `DCS 1 $ q`, `APC`, or `C1 0x84`.
 
-- Each distinct sequence is reported once per session, so a host that repeats
-  it on every redraw cannot flood event subscribers. A terminal remembers at
-  most 256 distinct sequences; later new sequences are not reported.
+- A profile emits an event for every occurrence. The session publishes only
+  the first occurrence of each distinct sequence, so a host that repeats it on
+  every redraw cannot flood event subscribers, and logs it at `Warn` with the
+  session and connection identifiers. Repeats are logged at `Debug` and
+  counted; `Session.UnsupportedSequences` returns each sequence with the
+  number of times it was received. A session tracks at most 256 distinct
+  sequences; later new sequences are neither counted nor reported.
 - Reports name a mode or SGR parameter individually when the rest of the
   sequence is supported. They never include control-string content, which can
   carry screen text or clipboard data.

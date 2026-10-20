@@ -78,7 +78,12 @@ matcher when one is available.
 
 Canceled and failed waits return a `WaitError`. It retains the matcher
 description and last detached snapshot, allowing assertion libraries to report
-the actual screen without TUICast depending on a test framework.
+the actual screen without TUICast depending on a test framework. Its
+`Recording` is a `FlightRecording`: the session's most recent host output (up
+to 64 KiB) exactly as read, each read with its offset from session start and
+the screen revision it produced, plus resizes and the unsupported-sequence
+counts. `Session.FlightRecording` returns the same copy on demand. See
+[`troubleshooting.md`](troubleshooting.md#step-2-flight-recorder).
 
 Snapshots are detached from later updates and may be safely retained by test
 code while the session continues processing output.
@@ -113,7 +118,9 @@ for screen := range session.Screens(ctx) {
 
 `Session.Events` separately observes non-screen controls such as BELL and ENQ,
 and reports each distinct sequence the terminal ignored as an
-`EventUnsupported` event, which the session also logs at `Warn`. Events carry
+`EventUnsupported` event, which the session also logs at `Warn`. The terminal
+reports every occurrence; the session publishes the first, logs repeats at
+`Debug`, and counts all of them for `Session.UnsupportedSequences`. Events carry
 session-monotonic sequence numbers. ENQ causes the session to send
 the terminal's configured answerback before publishing the event. Event
 subscribers are buffered; a subscriber that cannot keep up is closed rather

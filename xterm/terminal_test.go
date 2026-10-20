@@ -1,7 +1,6 @@
 package xterm_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/castingcode/tuicast"
@@ -140,7 +139,7 @@ func TestTerminal(t *testing.T) {
 		So(terminal.DrainEvents(), ShouldBeEmpty)
 	})
 
-	Convey("Ignored sequences are reported once each", t, func() {
+	Convey("Ignored sequences are reported on every occurrence", t, func() {
 		terminal := newTerminal(8, 2)
 
 		write(terminal, "\x1b[?2004h\x1b[?1000h\x1b=\x1b[?1234h\x1b[?1234h\x1b[6n\x1b[>c\x1b[3m")
@@ -148,9 +147,9 @@ func TestTerminal(t *testing.T) {
 		write(terminal, "\x1b[?1234h\x1b[20h")
 
 		So(unsupported(terminal.DrainEvents()), ShouldResemble, []string{
-			"CSI ? 1234 h", "CSI 6 n", "CSI > c", "CSI 3 m",
+			"CSI ? 1234 h", "CSI ? 1234 h", "CSI 6 n", "CSI > c", "CSI 3 m",
 			"OSC 52", "OSC", "DCS 1 $ q", "APC", "PM", "SOS", "ESC # 8",
-			"CSI 20 h",
+			"CSI ? 1234 h", "CSI 20 h",
 		})
 		So(terminal.Snapshot().Text(), ShouldEqual, "        \n        ")
 	})
@@ -171,13 +170,6 @@ func TestTerminal(t *testing.T) {
 		So(unsupported(terminal.DrainEvents()), ShouldResemble, []string{"ESC # 8", "CSI 1;2 $ r", "CSI 38;2 m", "CSI 48;2 m"})
 	})
 
-	Convey("Distinct unsupported reports are bounded", t, func() {
-		terminal := newTerminal(8, 1)
-		for mode := 3000; mode < 3300; mode++ {
-			write(terminal, fmt.Sprintf("\x1b[?%dh", mode))
-		}
-		So(unsupported(terminal.DrainEvents()), ShouldHaveLength, 256)
-	})
 }
 
 func unsupported(events []tuicast.TerminalEvent) []string {

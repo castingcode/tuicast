@@ -132,6 +132,7 @@ exec op read "op://WMS/$1/password"
 | `tuicast_wait_for_idle` | Wait until host output has been quiet for a period. |
 | `tuicast_wait_for_end` | Wait until the host ends a session, such as after a sign-out. |
 | `tuicast_events` | Read bell, enquiry, and unsupported-sequence events. |
+| `tuicast_failure_dump` | Read the host output that preceded the session's last failed wait. |
 | `tuicast_type` | Send literal text without logging it. |
 | `tuicast_press` | Send a named or printable key with modifiers. |
 | `tuicast_start_recording` | Start recording a session's successful operations. |
@@ -165,6 +166,12 @@ expectation it will write, so MCP waits use the same semantics as the driver:
   unsupported-sequence probes are not lost while the agent is busy. `missed`
   counts requested events that are no longer retained. Bells matter for
   automation because RF and warehouse applications commonly beep on errors.
+- `tuicast_failure_dump` exposes the flight-recorder dump an SDK receives on a
+  failed wait. The service keeps the most recent failed wait of each session.
+  The default `readable` format lists each recorded read with Go escapes such
+  as `\x1b`, its time offset, and the screen revision it produced, which an
+  agent can read directly; `jsonl` returns the same JSON-lines dump the SDKs
+  receive.
 
 Both packages decode matchers through `tuicast.MatcherSpec`, so the
 expressions cannot drift apart. Because the expressions are recursive, the

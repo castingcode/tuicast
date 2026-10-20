@@ -246,3 +246,12 @@ Application error messages retain TUICast's operation context and wait
 diagnostics. Wait failures also include structured JSON-RPC error `data` with
 `kind`, `expected`, and the last `screen`, allowing clients to report useful
 diagnostics without parsing the human-readable message.
+
+Wait failure data also includes `dump`, the session's flight-recorder dump in
+JSON-lines trace format: the most recent host output (up to 64 KiB) as it was
+received, with timing and screen revisions, the unsupported-sequence counts,
+and the failure. SDKs expose it on their wait errors so a test can save it
+with its report. When the driver runs with `-dump-dir`, it also writes the
+dump to an owner-only file in that directory and returns the file's path in
+`dumpPath`; the directory is off by default. See
+[`troubleshooting.md`](troubleshooting.md#step-2-flight-recorder).

@@ -47,6 +47,8 @@ class DriverTest {
       assertEquals("timeout", failure.kind());
       assertTrue(failure.expected().contains("MISSING"));
       assertEquals("READY", failure.lastScreen().text());
+      assertEquals(Optional.of("{\"type\":\"header\"}\n"), failure.dump());
+      assertEquals(Optional.of("/tmp/tuicast-session-1-1.jsonl"), failure.dumpPath());
       assertEquals(-32000, failure.code());
       assertNotNull(failure.data());
       assertEquals(new SessionState(false, Optional.empty()), session.state());

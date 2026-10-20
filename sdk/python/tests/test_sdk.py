@@ -35,6 +35,8 @@ def test_lifecycle_concurrency_waits_and_subscriptions(driver):
     with pytest.raises(tuicast.WaitError) as caught:
         session.wait_for_text("MISSING")
     assert tuicast.is_timeout(caught.value) and caught.value.last_screen.text == "READY"
+    assert caught.value.dump == '{"type":"header"}\n'
+    assert caught.value.dump_path == "/tmp/tuicast-session-1-1.jsonl"
     assert session.state() == tuicast.SessionState(ended=False)
     assert session.wait_for_end(timeout=0.25) == tuicast.SessionState(
         ended=True, error="reading terminal output: reset"

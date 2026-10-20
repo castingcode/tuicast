@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -8,10 +9,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/castingcode/tuicast"
+	"github.com/castingcode/tuicast/trace"
 )
 
 // replayedEvents bounds the retained events sent when an event subscription
@@ -63,10 +66,22 @@ type Server struct {
 	context          context.Context
 	cancel           context.CancelFunc
 	closed           bool
+	logger           *slog.Logger
+	dumpDirectory    string
+}
+
+// Option configures a driver server.
+type Option func(*Server)
+
+// WithDumpDirectory writes the flight-recorder dump of each failed wait to a
+// file in directory and returns its path in the wait error data. Wait errors
+// include the dump inline whether or not a directory is configured.
+func WithDumpDirectory(directory string) Option {
+	return func(s *Server) { s.dumpDirectory = directory }
 }
 
 // New creates a driver server using injected concrete factories.
-func New(logger *slog.Logger, connectors ConnectorFactory, terminals TerminalFactory) (*Server, error) {
+func New(logger *slog.Logger, connectors ConnectorFactory, terminals TerminalFactory, options ...Option) (*Server, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("creating TUICast driver: logger is required")
 	}
@@ -81,7 +96,8 @@ func New(logger *slog.Logger, connectors ConnectorFactory, terminals TerminalFac
 		return nil, fmt.Errorf("creating driver core: %w", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Server{
+	server := &Server{
+		logger:        logger,
 		core:          core,
 		connectors:    connectors,
 		terminals:     terminals,
@@ -91,7 +107,11 @@ func New(logger *slog.Logger, connectors ConnectorFactory, terminals TerminalFac
 		controls:      make(map[uint64]*SessionControl),
 		context:       ctx,
 		cancel:        cancel,
-	}, nil
+	}
+	for _, option := range options {
+		option(server)
+	}
+	return server, nil
 }
 
 // Run serves JSON-RPC 2.0 objects from input and writes responses and
@@ -588,7 +608,7 @@ func (s *Server) wait(data json.RawMessage) (any, *responseError) {
 		screen, err = session.WaitFor(ctx, matcher)
 	}
 	if err != nil {
-		return nil, applicationError(err)
+		return nil, s.waitFailure(params.SessionID, err)
 	}
 	return makeScreenResult(screen), nil
 }
@@ -624,7 +644,7 @@ func (s *Server) waitForIdle(data json.RawMessage) (any, *responseError) {
 	defer cancel()
 	screen, err := session.WaitForIdle(ctx, quiet)
 	if err != nil {
-		return nil, applicationError(err)
+		return nil, s.waitFailure(params.SessionID, err)
 	}
 	return makeScreenResult(screen), nil
 }
@@ -668,12 +688,61 @@ func (s *Server) waitForEnd(data json.RawMessage) (any, *responseError) {
 	case <-session.Done():
 		return makeSessionStateResult(session), nil
 	case <-ctx.Done():
-		return nil, applicationError(&tuicast.WaitError{
+		recording := session.FlightRecording()
+		return nil, s.waitFailure(params.SessionID, &tuicast.WaitError{
 			Expected:   "session end",
 			LastScreen: session.Screen(),
 			Cause:      ctx.Err(),
+			Recording:  &recording,
 		})
 	}
+}
+
+// waitFailure converts a failed wait to a response error carrying the
+// flight-recorder dump inline and, when a dump directory is configured, the
+// path of a file containing the same dump.
+func (s *Server) waitFailure(sessionID uint64, err error) *responseError {
+	responseErr := applicationError(err)
+	var waitErr *tuicast.WaitError
+	data, ok := responseErr.Data.(waitErrorData)
+	if !ok || !errors.As(err, &waitErr) || waitErr.Recording == nil {
+		return responseErr
+	}
+	var dump bytes.Buffer
+	if err := trace.WriteDump(&dump, waitErr); err != nil {
+		s.logger.Warn("encoding wait failure dump", "session_id", sessionID, "error", err)
+		return responseErr
+	}
+	data.Dump = dump.String()
+	if s.dumpDirectory != "" {
+		path, err := writeDumpFile(s.dumpDirectory, sessionID, dump.Bytes())
+		if err != nil {
+			s.logger.Warn("writing wait failure dump", "session_id", sessionID, "error", err)
+		} else {
+			s.logger.Info("wrote wait failure dump", "session_id", sessionID, "path", path)
+			data.DumpPath = path
+		}
+	}
+	responseErr.Data = data
+	return responseErr
+}
+
+// writeDumpFile writes dump to a new owner-only file in directory.
+func writeDumpFile(directory string, sessionID uint64, dump []byte) (string, error) {
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return "", fmt.Errorf("creating dump directory: %w", err)
+	}
+	file, err := os.CreateTemp(directory, fmt.Sprintf("tuicast-session-%d-*.jsonl", sessionID))
+	if err != nil {
+		return "", fmt.Errorf("creating dump file: %w", err)
+	}
+	if _, err := file.Write(dump); err != nil {
+		return "", errors.Join(fmt.Errorf("writing dump file: %w", err), file.Close())
+	}
+	if err := file.Close(); err != nil {
+		return "", fmt.Errorf("closing dump file: %w", err)
+	}
+	return file.Name(), nil
 }
 
 func (s *Server) subscribe(data json.RawMessage, writer *rpcWriter) (any, *responseError) {

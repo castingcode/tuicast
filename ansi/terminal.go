@@ -60,12 +60,7 @@ type Terminal struct {
 	answerback        string
 	events            []tuicast.TerminalEvent
 	title             string
-	reported          map[string]struct{}
 }
-
-// maximumUnsupportedReports bounds the distinct unsupported sequences one
-// terminal remembers, because parameterized sequences can vary without limit.
-const maximumUnsupportedReports = 256
 
 // New creates a terminal engine for profile.
 func New(width, height int, profile Profile) (*Terminal, error) {
@@ -321,6 +316,13 @@ func (t *Terminal) Write(data []byte) (int, error) {
 		t.revision = before + 1
 	}
 	return n, nil
+}
+
+// Revision returns the current screen revision without copying the screen.
+func (t *Terminal) Revision() uint64 {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.revision
 }
 
 // Snapshot returns state detached from subsequent terminal updates.
@@ -643,17 +645,9 @@ func (t *Terminal) handleOSC(command int, data []byte) {
 	}
 }
 
-// unsupported reports a sequence the terminal ignored. Each distinct sequence
-// is reported once so a host that repeats it on every redraw cannot flood
-// event subscribers.
+// unsupported reports each occurrence of a sequence the terminal ignored. The
+// session counts occurrences and publishes only the first of each.
 func (t *Terminal) unsupported(sequence string) {
-	if _, reported := t.reported[sequence]; reported || len(t.reported) >= maximumUnsupportedReports {
-		return
-	}
-	if t.reported == nil {
-		t.reported = make(map[string]struct{})
-	}
-	t.reported[sequence] = struct{}{}
 	t.events = append(t.events, tuicast.TerminalEvent{Type: tuicast.EventUnsupported, Data: sequence})
 }
 

@@ -151,7 +151,9 @@ observes the same terminal output and quiet-period semantics.
 ## Errors and cleanup
 
 Driver-side wait failures become `*tuicast.WaitError`, including the expected
-condition and last screen:
+condition, the last screen, and `Dump`, the flight-recorder dump of the host
+output that preceded the failure (`DumpPath` names a file copy when the driver
+runs with `-dump-dir`):
 
 ```go
 screen, err := session.WaitForText(ctx, "READY")
@@ -159,6 +161,7 @@ if tuicast.IsTimeout(err) {
     var waitErr *tuicast.WaitError
     if errors.As(err, &waitErr) {
         t.Log(waitErr.LastScreen.Text())
+        _ = os.WriteFile(filepath.Join(t.TempDir(), "wait-failure.jsonl"), []byte(waitErr.Dump), 0o600)
     }
 }
 ```

@@ -18,7 +18,10 @@ and `Attributes` name cell palette indexes and attribute bits, and
 `hasAttributes(cell, mask)` checks that every requested attribute is set.
 Screen updates coalesce; terminal events use an ordered
 64-item bounded queue. All operations accept `AbortSignal` and millisecond
-timeouts. `RPCError` and `WaitError` preserve structured driver diagnostics.
+timeouts. `RPCError` and `WaitError` preserve structured driver diagnostics;
+`WaitError.dump` holds the flight-recorder dump of the host output that
+preceded a failed wait, and `dumpPath` its file copy when the driver runs with
+`-dump-dir`.
 All lifecycle `close()` methods are idempotent.
 
 ```ts

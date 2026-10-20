@@ -405,6 +405,8 @@ func makeClientError(responseErr *RPCError) error {
 		Kind     string `json:"kind"`
 		Expected string `json:"expected"`
 		Screen   Screen `json:"screen"`
+		Dump     string `json:"dump"`
+		DumpPath string `json:"dumpPath"`
 	}
 	if err := json.Unmarshal(responseErr.Data, &data); err != nil || data.Kind == "" {
 		return responseErr
@@ -413,6 +415,8 @@ func makeClientError(responseErr *RPCError) error {
 		Kind:       data.Kind,
 		Expected:   data.Expected,
 		LastScreen: data.Screen,
+		Dump:       data.Dump,
+		DumpPath:   data.DumpPath,
 		Cause:      responseErr,
 	}
 }

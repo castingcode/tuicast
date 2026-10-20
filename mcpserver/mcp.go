@@ -110,6 +110,15 @@ func NewMCPServer(service *Service, version string) (*mcp.Server, error) {
 		return nil, result, err
 	})
 	mcp.AddTool(server, &mcp.Tool{
+		Name: "tuicast_failure_dump",
+		Description: "After a wait fails, read the host output that preceded the failure: the session's most recent output (up to 64 KiB) as it was received, each read with its time offset and the screen revision it produced, plus resizes and counts of control sequences TUICast ignored. Use it when the screen does not look the way the application should have drawn it. " +
+			"The default readable format shows bytes with Go escapes such as \\x1b for ESC. Format jsonl returns the JSON-lines trace dump that the driver SDKs receive, for saving with a test report.",
+		Annotations: readOnly,
+	}, func(_ context.Context, _ *mcp.CallToolRequest, input failureDumpInput) (*mcp.CallToolResult, FailureDumpInfo, error) {
+		result, err := service.FailureDump(input.SessionID, input.Format)
+		return nil, result, err
+	})
+	mcp.AddTool(server, &mcp.Tool{
 		Name: "tuicast_type", Description: "Type literal text into an interactive terminal session. The text is sent exactly and is not logged by TUICast. While recording, set parameter for passwords and other secrets so the recording stores the parameter name instead of the text.", Annotations: changesTerminal,
 	}, func(_ context.Context, _ *mcp.CallToolRequest, input typeInput) (*mcp.CallToolResult, actionOutput, error) {
 		err := service.Type(input.SessionID, input.Text, input.Parameter)
@@ -230,6 +239,11 @@ type waitForEndInput struct {
 type eventsInput struct {
 	SessionID     uint64 `json:"sessionId" jsonschema:"TUICast session identifier"`
 	AfterSequence uint64 `json:"afterSequence,omitempty" jsonschema:"return only events with a larger sequence number; defaults to 0 for all retained events"`
+}
+
+type failureDumpInput struct {
+	SessionID uint64 `json:"sessionId" jsonschema:"TUICast session identifier"`
+	Format    string `json:"format,omitempty" jsonschema:"readable (default) or jsonl"`
 }
 
 type typeInput struct {

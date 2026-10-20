@@ -163,4 +163,6 @@ type waitErrorData struct {
 	Kind     string       `json:"kind"`
 	Expected string       `json:"expected"`
 	Screen   screenResult `json:"screen"`
+	Dump     string       `json:"dump,omitempty"`
+	DumpPath string       `json:"dumpPath,omitempty"`
 }

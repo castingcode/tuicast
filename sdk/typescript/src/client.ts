@@ -176,7 +176,14 @@ export class Driver {
           const d = m.error.data;
           pending.reject(
             d?.kind
-              ? new WaitError(d.kind, d.expected, new Screen(d.screen), rpc)
+              ? new WaitError(
+                  d.kind,
+                  d.expected,
+                  new Screen(d.screen),
+                  rpc,
+                  d.dump,
+                  d.dumpPath,
+                )
               : rpc,
           );
         } else pending.resolve(m.result);

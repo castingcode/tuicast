@@ -88,6 +88,7 @@ func TestInformationFlags(t *testing.T) {
 			So(run([]string{flagName}, strings.NewReader(""), &output, logger), ShouldBeNil)
 			So(output.String(), ShouldStartWith, "Usage: tuicast-driver")
 			So(output.String(), ShouldContainSubstring, "-ui-address")
+			So(output.String(), ShouldContainSubstring, "-dump-dir")
 			So(output.String(), ShouldContainSubstring, "-version")
 		})
 	}

@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -116,6 +119,9 @@ func TestDriverProtocol(t *testing.T) {
 		So(responseErr.Data.(waitErrorData).Kind, ShouldEqual, "timeout")
 		So(responseErr.Data.(waitErrorData).Expected, ShouldEqual, `screen containing "MISSING"`)
 		So(responseErr.Data.(waitErrorData).Screen.Text, ShouldContainSubstring, "READY")
+		So(responseErr.Data.(waitErrorData).Dump, ShouldStartWith, `{"type":"header","version":1,"terminal":"vt220"`)
+		So(responseErr.Data.(waitErrorData).Dump, ShouldContainSubstring, `"type":"waitFailure"`)
+		So(responseErr.Data.(waitErrorData).DumpPath, ShouldBeEmpty)
 
 		result, responseErr = server.resize(raw(map[string]any{
 			"sessionId": sessionID,
@@ -227,6 +233,23 @@ func TestDriverProtocol(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 		So(output.String(), ShouldContainSubstring, `"type":"unsupported","data":"CSI ? 1234 h"`)
+
+		_, responseErr = server.send(raw(map[string]any{"sessionId": sessionID, "text": "\x1b[?1234h"}))
+		So(responseErr, ShouldBeNil)
+		repeated := UnsupportedSnapshot{Sequence: "CSI ? 1234 h", Count: 2}
+		counted := func() bool {
+			for _, sequence := range server.DriverSnapshot().Sessions[0].Unsupported {
+				if sequence == repeated {
+					return true
+				}
+			}
+			return false
+		}
+		for !counted() && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		So(server.DriverSnapshot().Sessions[0].Unsupported, ShouldContain, repeated)
+		So(strings.Count(output.String(), `"data":"CSI ? 1234 h"`), ShouldEqual, 1)
 	})
 
 	Convey("Event subscriptions start with the most recent retained events", t, func() {
@@ -356,6 +379,44 @@ func TestDriverProtocol(t *testing.T) {
 		result, responseErr = server.screen(raw(map[string]uint64{"sessionId": sessionID}))
 		So(responseErr, ShouldBeNil)
 		So(result.(screenResult).Text, ShouldContainSubstring, "BYE")
+	})
+}
+
+func TestWaitFailureDumps(t *testing.T) {
+	Convey("A configured dump directory receives an owner-only copy of each wait failure dump", t, func() {
+		directory := filepath.Join(t.TempDir(), "dumps")
+		server, err := New(
+			slog.New(slog.NewTextHandler(io.Discard, nil)),
+			func(ConnectionOptions) (tuicast.Connector, error) {
+				return memory.NewConnector(func(_ context.Context, remote io.ReadWriteCloser) {
+					_, _ = io.Copy(remote, remote)
+				})
+			},
+			func(_ string, width, height int) (tuicast.Terminal, error) { return vt220.New(width, height) },
+			WithDumpDirectory(directory),
+		)
+		So(err, ShouldBeNil)
+		defer server.Close()
+		opened, responseErr := server.openConnection(raw(map[string]any{"protocol": "memory", "address": "reference"}))
+		So(responseErr, ShouldBeNil)
+		opened, responseErr = server.openSession(raw(map[string]any{
+			"connectionId": opened.(map[string]uint64)["connectionId"], "terminal": "vt220", "width": 10, "height": 2,
+		}))
+		So(responseErr, ShouldBeNil)
+		sessionID := opened.(map[string]uint64)["sessionId"]
+
+		_, responseErr = server.waitForEnd(raw(map[string]any{"sessionId": sessionID, "timeoutMilliseconds": 10}))
+		So(responseErr, ShouldNotBeNil)
+		data := responseErr.Data.(waitErrorData)
+		So(data.Dump, ShouldContainSubstring, `"expected":"session end"`)
+		So(filepath.Dir(data.DumpPath), ShouldEqual, directory)
+		So(filepath.Base(data.DumpPath), ShouldStartWith, fmt.Sprintf("tuicast-session-%d-", sessionID))
+		info, err := os.Stat(data.DumpPath)
+		So(err, ShouldBeNil)
+		So(info.Mode().Perm(), ShouldEqual, os.FileMode(0o600))
+		contents, err := os.ReadFile(data.DumpPath)
+		So(err, ShouldBeNil)
+		So(string(contents), ShouldEqual, data.Dump)
 	})
 }
 

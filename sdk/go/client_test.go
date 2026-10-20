@@ -102,7 +102,10 @@ func TestDriverHelperProcess(t *testing.T) {
 				if params.Matcher.Contains != nil && *params.Matcher.Contains == "MISSING" {
 					response["error"] = map[string]any{
 						"code": -32000, "message": "wait timed out",
-						"data": map[string]any{"kind": "timeout", "expected": `screen containing "MISSING"`, "screen": helperScreen()},
+						"data": map[string]any{
+							"kind": "timeout", "expected": `screen containing "MISSING"`, "screen": helperScreen(),
+							"dump": "{\"type\":\"header\"}\n", "dumpPath": "/tmp/tuicast-session-1-1.jsonl",
+						},
 					}
 					break
 				}
@@ -209,6 +212,8 @@ func TestClientLifecycle(t *testing.T) {
 		var waitErr *WaitError
 		So(errors.As(err, &waitErr), ShouldBeTrue)
 		So(waitErr.LastScreen.Text(), ShouldEqual, "READY")
+		So(waitErr.Dump, ShouldEqual, "{\"type\":\"header\"}\n")
+		So(waitErr.DumpPath, ShouldEqual, "/tmp/tuicast-session-1-1.jsonl")
 
 		state, err := session.State(context.Background())
 		So(err, ShouldBeNil)

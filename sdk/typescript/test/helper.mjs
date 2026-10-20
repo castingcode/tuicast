@@ -75,7 +75,13 @@ rl.on("line", (line) => {
         r.error = {
           code: -32000,
           message: "timed out",
-          data: { kind: "timeout", expected: "missing", screen: screen() },
+          data: {
+            kind: "timeout",
+            expected: "missing",
+            screen: screen(),
+            dump: '{"type":"header"}\n',
+            dumpPath: "/tmp/tuicast-session-1-1.jsonl",
+          },
         };
       } else r.result = screen();
       break;

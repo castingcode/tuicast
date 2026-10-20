@@ -11,11 +11,13 @@ import (
 )
 
 // WaitError reports why a screen wait ended and retains the last observed
-// snapshot for assertion diagnostics.
+// snapshot for assertion diagnostics. Recording, when present, holds the host
+// output that preceded the failure.
 type WaitError struct {
 	Expected   string
 	LastScreen Screen
 	Cause      error
+	Recording  *FlightRecording
 }
 
 func (e *WaitError) Error() string {
@@ -47,14 +49,19 @@ type Session struct {
 	nextEventSubscriber uint64
 	eventSubscribers    map[uint64]chan TerminalEvent
 	eventHistory        []TerminalEvent
+	unsupported         []UnsupportedSequence
+	unsupportedIndex    map[string]int
+	recorder            *flightRecorder
 	closeOnce           sync.Once
 	onClose             func(*Session)
 	logger              *slog.Logger
 }
 
 func newSession(id uint64, terminal Terminal, stream SessionStream, onClose func(*Session), logger *slog.Logger) *Session {
+	screen := terminal.Snapshot()
 	return &Session{
 		id:               id,
+		recorder:         newFlightRecorder(time.Now(), screen.Width, screen.Height),
 		logger:           logger,
 		terminal:         terminal,
 		stream:           stream,
@@ -157,6 +164,7 @@ func (s *Session) Resize(width, height int) error {
 	if err := s.terminal.Resize(width, height); err != nil {
 		return fmt.Errorf("resizing local terminal: %w", err)
 	}
+	s.recorder.resize(time.Now(), width, height)
 	s.signalChange()
 	return nil
 }
@@ -182,14 +190,14 @@ func (s *Session) WaitFor(ctx context.Context, matcher ScreenMatcher) (Screen, e
 		}
 		if finished {
 			if err != nil {
-				return screen, newWaitError(matcher, screen, fmt.Errorf("session ended: %w", err))
+				return screen, s.newWaitError(matcher, screen, fmt.Errorf("session ended: %w", err))
 			}
-			return screen, newWaitError(matcher, screen, fmt.Errorf("session ended"))
+			return screen, s.newWaitError(matcher, screen, fmt.Errorf("session ended"))
 		}
 
 		select {
 		case <-ctx.Done():
-			return screen, newWaitError(matcher, screen, ctx.Err())
+			return screen, s.newWaitError(matcher, screen, ctx.Err())
 		case <-changed:
 		case <-done:
 		}
@@ -218,14 +226,14 @@ func (s *Session) WaitForStable(ctx context.Context, matcher ScreenMatcher, quie
 		screen := s.terminal.Snapshot()
 		if finished {
 			if err != nil {
-				return screen, newWaitError(matcher, screen, fmt.Errorf("session ended: %w", err))
+				return screen, s.newWaitError(matcher, screen, fmt.Errorf("session ended: %w", err))
 			}
-			return screen, newWaitError(matcher, screen, fmt.Errorf("session ended"))
+			return screen, s.newWaitError(matcher, screen, fmt.Errorf("session ended"))
 		}
 		if !matcher.Match(screen) {
 			select {
 			case <-ctx.Done():
-				return screen, newWaitError(matcher, screen, ctx.Err())
+				return screen, s.newWaitError(matcher, screen, ctx.Err())
 			case <-changed:
 			case <-done:
 			}
@@ -236,7 +244,7 @@ func (s *Session) WaitForStable(ctx context.Context, matcher ScreenMatcher, quie
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return screen, newWaitError(matcher, screen, ctx.Err())
+			return screen, s.newWaitError(matcher, screen, ctx.Err())
 		case <-changed:
 			timer.Stop()
 			continue
@@ -257,9 +265,9 @@ func (s *Session) WaitForStable(ctx context.Context, matcher ScreenMatcher, quie
 		}
 		if finished {
 			if err != nil {
-				return screen, newWaitError(matcher, screen, fmt.Errorf("session ended: %w", err))
+				return screen, s.newWaitError(matcher, screen, fmt.Errorf("session ended: %w", err))
 			}
-			return screen, newWaitError(matcher, screen, fmt.Errorf("session ended"))
+			return screen, s.newWaitError(matcher, screen, fmt.Errorf("session ended"))
 		}
 	}
 }
@@ -411,8 +419,14 @@ func (s *Session) readLoop() {
 	for {
 		n, readErr := s.stream.Read(buffer)
 		if n > 0 {
+			received := time.Now()
 			s.signalOutput()
-			if _, err := s.terminal.Write(buffer[:n]); err != nil {
+			var err error
+			s.recorder.output(received, buffer[:n], func() uint64 {
+				_, err = s.terminal.Write(buffer[:n])
+				return s.revision()
+			})
+			if err != nil {
 				terminalErr = fmt.Errorf("applying terminal output: %w", err)
 				break
 			}
@@ -426,6 +440,10 @@ func (s *Session) readLoop() {
 						}
 					}
 					if event.Type == EventUnsupported {
+						if !s.recordUnsupported(event.Data) {
+							s.logger.Debug("ignored unsupported terminal sequence", "session_id", s.id, "sequence", event.Data)
+							continue
+						}
 						s.logger.Warn("ignored unsupported terminal sequence", "session_id", s.id, "sequence", event.Data)
 					}
 					s.publishEvent(event)
@@ -496,6 +514,47 @@ func (s *Session) signalOutput() {
 // retainedEvents bounds the history returned by EventsAfter.
 const retainedEvents = 256
 
+// trackedUnsupportedSequences bounds the distinct unsupported sequences a
+// session counts, because parameterized sequences can vary without limit.
+const trackedUnsupportedSequences = 256
+
+// UnsupportedSequence counts how often the host sent a sequence the terminal
+// ignored. Sequence uses the notation of EventUnsupported data.
+type UnsupportedSequence struct {
+	Sequence string
+	Count    uint64
+}
+
+// UnsupportedSequences returns the sequences the terminal has ignored in the
+// order they first appeared, with the number of times each was received. A
+// session counts at most 256 distinct sequences; later new sequences are
+// neither counted nor reported.
+func (s *Session) UnsupportedSequences() []UnsupportedSequence {
+	s.eventMu.Lock()
+	defer s.eventMu.Unlock()
+	return append([]UnsupportedSequence(nil), s.unsupported...)
+}
+
+// recordUnsupported counts an unsupported sequence and reports whether it is
+// the first occurrence of a tracked sequence and should be published.
+func (s *Session) recordUnsupported(sequence string) bool {
+	s.eventMu.Lock()
+	defer s.eventMu.Unlock()
+	if index, tracked := s.unsupportedIndex[sequence]; tracked {
+		s.unsupported[index].Count++
+		return false
+	}
+	if len(s.unsupported) == trackedUnsupportedSequences {
+		return false
+	}
+	if s.unsupportedIndex == nil {
+		s.unsupportedIndex = make(map[string]int)
+	}
+	s.unsupportedIndex[sequence] = len(s.unsupported)
+	s.unsupported = append(s.unsupported, UnsupportedSequence{Sequence: sequence, Count: 1})
+	return true
+}
+
 func (s *Session) publishEvent(event TerminalEvent) {
 	s.eventMu.Lock()
 	s.eventSequence++
@@ -515,12 +574,28 @@ func (s *Session) publishEvent(event TerminalEvent) {
 	s.eventMu.Unlock()
 }
 
-func newWaitError(matcher ScreenMatcher, screen Screen, cause error) error {
+func (s *Session) newWaitError(matcher ScreenMatcher, screen Screen, cause error) error {
+	recording := s.FlightRecording()
 	return &WaitError{
 		Expected:   matcherDescription(matcher),
 		LastScreen: screen,
 		Cause:      cause,
+		Recording:  &recording,
 	}
+}
+
+// FlightRecording returns a detached copy of the session's most recent host
+// output, up to 64 KiB, with the resizes between reads and the session's
+// unsupported-sequence counts. Wait errors include one automatically.
+func (s *Session) FlightRecording() FlightRecording {
+	return s.recorder.recording(s.terminal.Profile(), time.Now(), s.UnsupportedSequences())
+}
+
+func (s *Session) revision() uint64 {
+	if reporter, ok := s.terminal.(revisionReporter); ok {
+		return reporter.Revision()
+	}
+	return s.terminal.Snapshot().Revision
 }
 
 func publishScreen(ctx context.Context, screens chan Screen, screen Screen) bool {

@@ -239,6 +239,46 @@ func TestServiceWaitsAndRecordings(t *testing.T) {
 		So(err.Error(), ShouldContainSubstring, "unknown session")
 	})
 
+	Convey("A failed wait's flight recording is readable and exportable", t, func() {
+		service := newService(func(ctx context.Context, remote io.ReadWriteCloser) {
+			_, _ = remote.Write([]byte("\x1b[?1049h\xffREADY"))
+			<-ctx.Done()
+		})
+		defer service.Close()
+		connection, err := service.Connect(context.Background(), "warehouse")
+		So(err, ShouldBeNil)
+		session, err := service.OpenSession(context.Background(), connection.ConnectionID)
+		So(err, ShouldBeNil)
+		ready, err := service.WaitForText(context.Background(), session.SessionID, "READY", time.Second)
+		So(err, ShouldBeNil)
+		_, err = service.FailureDump(session.SessionID, "")
+		So(err.Error(), ShouldContainSubstring, "has no failed wait")
+
+		_, err = service.WaitForText(context.Background(), session.SessionID, "MISSING", 10*time.Millisecond)
+		So(err, ShouldNotBeNil)
+		dump, err := service.FailureDump(session.SessionID, "")
+		So(err, ShouldBeNil)
+		So(dump.Expected, ShouldEqual, `screen containing "MISSING"`)
+		So(dump.Cause, ShouldEqual, "context deadline exceeded")
+		So(dump.LastScreenRevision, ShouldEqual, ready.Revision)
+		So(dump.Terminal, ShouldEqual, "vt220")
+		So([]int{dump.Width, dump.Height}, ShouldResemble, []int{20, 3})
+		So(dump.Records, ShouldHaveLength, 1)
+		So(dump.Records[0].Type, ShouldEqual, "output")
+		So(dump.Records[0].Text, ShouldEqual, `\x1b[?1049h\xffREADY`)
+		So(dump.Records[0].Revision, ShouldEqual, ready.Revision)
+		So(dump.Unsupported, ShouldResemble, []mcpserver.UnsupportedSequence{{Sequence: "CSI ? 1049 h", Count: 1}})
+		So(dump.Dump, ShouldBeEmpty)
+
+		exported, err := service.FailureDump(session.SessionID, "jsonl")
+		So(err, ShouldBeNil)
+		So(exported.Records, ShouldBeEmpty)
+		So(exported.Dump, ShouldStartWith, `{"type":"header","version":1,"terminal":"vt220"`)
+		So(exported.Dump, ShouldContainSubstring, `"type":"waitFailure"`)
+		_, err = service.FailureDump(session.SessionID, "xml")
+		So(err, ShouldNotBeNil)
+	})
+
 	Convey("A burst keeps the most recent 256 events and counts the rest as missed", t, func() {
 		service := newService(func(ctx context.Context, remote io.ReadWriteCloser) {
 			_, _ = remote.Write(bytes.Repeat([]byte{'\a'}, 300))

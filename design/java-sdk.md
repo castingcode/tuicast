@@ -6,7 +6,10 @@ out-of-order replies, and exposes `Driver`, `Connection`, `Session`, immutable
 `Screen` snapshots, typed SSH/Telnet configuration, matchers, waits, session-end
 state (`Session.state()` and `Session.waitForEnd()`), and bounded screen/event
 subscriptions. `Color` names cell palette indexes alongside the `Screen`
-attribute constants. All lifecycle types are idempotent `AutoCloseable`s.
+attribute constants. A failed wait throws `WaitException` with the last screen
+and `dump()`, the flight-recorder dump of the host output that preceded the
+failure (`dumpPath()` names a file copy when the driver runs with `-dump-dir`).
+All lifecycle types are idempotent `AutoCloseable`s.
 Drivers may add result fields within protocol version 1, so the SDK ignores
 unknown JSON fields.
 

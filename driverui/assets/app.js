@@ -96,7 +96,18 @@ async function startSession(id) {
       <div><p class="eyebrow">Live terminal</p><h1>Session ${id}</h1></div>
       <dl><div><dt>Terminal</dt><dd>${escapeHTML(metadata.terminal)}</dd></div><div><dt>Size</dt><dd id="size">${metadata.width} × ${metadata.height}</dd></div><div><dt>Revision</dt><dd id="revision">${metadata.revision}</dd></div><div class="title-item"><dt>Window title</dt><dd id="title" class="muted-text">None</dd></div><div><dt>Stream</dt><dd id="stream-state" class="online-text">Connecting</dd></div></dl>
     </section>
-    <section class="terminal-frame" aria-label="Session ${id} terminal screen"><pre id="screen">Waiting for screen…</pre></section>`;
+    <section class="terminal-frame" aria-label="Session ${id} terminal screen"><pre id="screen">Waiting for screen…</pre></section>
+    <section class="panel">
+      <div class="panel-heading"><h2>Unsupported sequences</h2><span id="unsupported-summary"></span></div>
+      <div id="unsupported"></div>
+    </section>`;
+  renderUnsupported(metadata);
+  window.setInterval(async () => {
+    try {
+      const session = (await loadState()).sessions.find(session => session.id === Number(id));
+      if (session) renderUnsupported(session);
+    } catch (_) {}
+  }, 2000);
 
   const streamState = document.querySelector("#stream-state");
   try {
@@ -124,6 +135,15 @@ async function startSession(id) {
     streamState.textContent = "Reconnecting";
     streamState.className = "offline-text";
   };
+}
+
+function renderUnsupported(session) {
+  const sequences = session.unsupported || [];
+  document.querySelector("#unsupported-summary").textContent = `${sequences.length} distinct`;
+  document.querySelector("#unsupported").innerHTML = sequences.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Sequence</th><th>Received</th></tr></thead><tbody>${sequences.map(sequence => `
+      <tr><td><code>${escapeHTML(sequence.sequence)}</code></td><td>${sequence.count}</td></tr>`).join("")}</tbody></table></div>`
+    : empty("The terminal has not ignored any host output.");
 }
 
 async function postWorkbench(id, operation, body = {}) {

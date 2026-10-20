@@ -91,7 +91,11 @@ public final class HelperDriver {
                               "expected",
                               "screen containing MISSING",
                               "screen",
-                              screen(3)))));
+                              screen(3),
+                              "dump",
+                              "{\"type\":\"header\"}\n",
+                              "dumpPath",
+                              "/tmp/tuicast-session-1-1.jsonl"))));
               continue;
             }
             result = screen(3);

@@ -32,7 +32,9 @@ const (
 	EventBell    TerminalEventType = "bell"
 	EventEnquiry TerminalEventType = "enquiry"
 	// EventUnsupported reports host output that the terminal profile does not
-	// implement and therefore ignored. Each distinct sequence is reported once.
+	// implement and therefore ignored. A terminal emits one for every
+	// occurrence; a session publishes only the first of each distinct
+	// sequence and counts the rest (see Session.UnsupportedSequences).
 	EventUnsupported TerminalEventType = "unsupported"
 )
 

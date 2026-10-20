@@ -79,7 +79,11 @@ test("lifecycle, concurrent correlation, waits and subscriptions", async () => {
   await assert.rejects(
     s.waitForText("MISSING"),
     (e) =>
-      e instanceof WaitError && isTimeout(e) && e.lastScreen.text === "READY",
+      e instanceof WaitError &&
+      isTimeout(e) &&
+      e.lastScreen.text === "READY" &&
+      e.dump === '{"type":"header"}\n' &&
+      e.dumpPath === "/tmp/tuicast-session-1-1.jsonl",
   );
   assert.deepEqual(await s.state(), { ended: false });
   assert.deepEqual(await s.waitForEnd({ timeout: 250 }), {

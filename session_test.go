@@ -211,7 +211,7 @@ func TestSessionAutomation(t *testing.T) {
 		So(server.Close(), ShouldBeNil)
 	})
 
-	Convey("Unsupported sequences are observable and logged once", t, func() {
+	Convey("Unsupported sequences are published once, counted, and logged", t, func() {
 		start := make(chan struct{})
 		connector, err := memory.NewConnector(func(ctx context.Context, remote io.ReadWriteCloser) {
 			select {
@@ -224,7 +224,7 @@ func TestSessionAutomation(t *testing.T) {
 		})
 		So(err, ShouldBeNil)
 		var logs bytes.Buffer
-		server, err := tuicast.NewServer(slog.New(slog.NewTextHandler(&logs, nil)))
+		server, err := tuicast.NewServer(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
 		So(err, ShouldBeNil)
 		connection, err := server.Connect(context.Background(), connector)
 		So(err, ShouldBeNil)
@@ -241,11 +241,152 @@ func TestSessionAutomation(t *testing.T) {
 		})
 		So(session.EventsAfter(1), ShouldResemble, []tuicast.TerminalEvent{{Sequence: 2, Type: tuicast.EventBell}})
 		So(session.EventsAfter(2), ShouldBeEmpty)
-		So(strings.Count(logs.String(), "ignored unsupported terminal sequence"), ShouldEqual, 1)
-		So(logs.String(), ShouldContainSubstring, `level=WARN`)
+		So(session.UnsupportedSequences(), ShouldResemble, []tuicast.UnsupportedSequence{{Sequence: "CSI ? 1234 h", Count: 2}})
+		So(strings.Count(logs.String(), `level=WARN msg="ignored unsupported terminal sequence"`), ShouldEqual, 1)
+		So(strings.Count(logs.String(), `level=DEBUG msg="ignored unsupported terminal sequence"`), ShouldEqual, 1)
 		So(logs.String(), ShouldContainSubstring, `sequence="CSI ? 1234 h"`)
 		So(logs.String(), ShouldContainSubstring, fmt.Sprintf("session_id=%d", session.ID()))
 		So(server.Close(), ShouldBeNil)
+	})
+
+	Convey("A failed wait carries the output that produced its last screen", t, func() {
+		second := make(chan struct{})
+		connector, err := memory.NewConnector(func(ctx context.Context, remote io.ReadWriteCloser) {
+			_, _ = remote.Write([]byte("ONE"))
+			select {
+			case <-second:
+				_, _ = remote.Write([]byte("\x1b[?1049h\r\nTWO"))
+			case <-ctx.Done():
+			}
+			<-ctx.Done()
+		})
+		So(err, ShouldBeNil)
+		server, err := tuicast.NewServer(slog.New(slog.NewTextHandler(io.Discard, nil)))
+		So(err, ShouldBeNil)
+		defer func() { So(server.Close(), ShouldBeNil) }()
+		connection, err := server.Connect(context.Background(), connector)
+		So(err, ShouldBeNil)
+		session, err := connection.NewSession(context.Background(), newTestTerminal(10, 2))
+		So(err, ShouldBeNil)
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_, err = session.WaitFor(ctx, tuicast.ScreenContains("ONE"))
+		So(err, ShouldBeNil)
+		So(session.Resize(12, 3), ShouldBeNil)
+		close(second)
+		_, err = session.WaitFor(ctx, tuicast.ScreenContains("TWO"))
+		So(err, ShouldBeNil)
+
+		short, cancelShort := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancelShort()
+		_, err = session.WaitFor(short, tuicast.ScreenContains("MISSING"))
+		var waitErr *tuicast.WaitError
+		So(errors.As(err, &waitErr), ShouldBeTrue)
+		recording := waitErr.Recording
+		So(recording, ShouldNotBeNil)
+		So(recording.Profile, ShouldEqual, tuicast.ProfileVT220)
+		So(recording.Width, ShouldEqual, 10)
+		So(recording.Height, ShouldEqual, 2)
+		So(recording.DroppedBytes, ShouldEqual, 0)
+		So(recording.Records, ShouldHaveLength, 3)
+		So(string(recording.Records[0].Data), ShouldEqual, "ONE")
+		So(recording.Records[1].Type, ShouldEqual, tuicast.FlightResize)
+		So([]int{recording.Records[1].Width, recording.Records[1].Height}, ShouldResemble, []int{12, 3})
+		last := recording.Records[2]
+		So(last.Type, ShouldEqual, tuicast.FlightOutput)
+		So(string(last.Data), ShouldEqual, "\x1b[?1049h\r\nTWO")
+		So(last.Revision, ShouldEqual, waitErr.LastScreen.Revision)
+		So(recording.Records[0].Offset, ShouldBeLessThanOrEqualTo, recording.Records[1].Offset)
+		So(recording.Records[1].Offset, ShouldBeLessThanOrEqualTo, last.Offset)
+		So(recording.Captured, ShouldBeGreaterThanOrEqualTo, last.Offset+20*time.Millisecond)
+		So(recording.Unsupported, ShouldResemble, []tuicast.UnsupportedSequence{{Sequence: "CSI ? 1049 h", Count: 1}})
+	})
+
+	Convey("A flight recording keeps the newest 64 KiB of output", t, func() {
+		start := make(chan struct{})
+		var sent bytes.Buffer
+		for index := 0; sent.Len() < 100*1024; index++ {
+			fmt.Fprintf(&sent, "%07d\r\n", index)
+		}
+		sent.WriteString("END")
+		connector, err := memory.NewConnector(func(ctx context.Context, remote io.ReadWriteCloser) {
+			select {
+			case <-start:
+			case <-ctx.Done():
+				return
+			}
+			data := sent.Bytes()
+			for len(data) > 0 {
+				size := min(len(data), 4096)
+				_, _ = remote.Write(data[:size])
+				data = data[size:]
+			}
+			<-ctx.Done()
+		})
+		So(err, ShouldBeNil)
+		server, err := tuicast.NewServer(slog.New(slog.NewTextHandler(io.Discard, nil)))
+		So(err, ShouldBeNil)
+		defer func() { So(server.Close(), ShouldBeNil) }()
+		connection, err := server.Connect(context.Background(), connector)
+		So(err, ShouldBeNil)
+		session, err := connection.NewSession(context.Background(), newTestTerminal(10, 2))
+		So(err, ShouldBeNil)
+		So(session.Resize(12, 3), ShouldBeNil)
+		close(start)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, err = session.WaitFor(ctx, tuicast.ScreenContains("END"))
+		So(err, ShouldBeNil)
+
+		recording := session.FlightRecording()
+		var retained []byte
+		for _, record := range recording.Records {
+			So(record.Type, ShouldEqual, tuicast.FlightOutput)
+			retained = append(retained, record.Data...)
+		}
+		So(len(retained), ShouldBeLessThanOrEqualTo, 64*1024)
+		So(len(retained), ShouldBeGreaterThan, 60*1024)
+		So(recording.DroppedBytes+uint64(len(retained)), ShouldEqual, sent.Len())
+		So(bytes.HasSuffix(sent.Bytes(), retained), ShouldBeTrue)
+		So([]int{recording.Width, recording.Height}, ShouldResemble, []int{12, 3})
+	})
+
+	Convey("A session counts at most 256 distinct unsupported sequences", t, func() {
+		var output strings.Builder
+		for mode := 3000; mode < 3300; mode++ {
+			fmt.Fprintf(&output, "\x1b[?%dh", mode)
+		}
+		output.WriteString("\x1b[?3000h\x1b[?3299h\a")
+		connector, err := memory.NewConnector(func(ctx context.Context, remote io.ReadWriteCloser) {
+			_, _ = remote.Write([]byte(output.String()))
+			<-ctx.Done()
+		})
+		So(err, ShouldBeNil)
+		server, err := tuicast.NewServer(slog.New(slog.NewTextHandler(io.Discard, nil)))
+		So(err, ShouldBeNil)
+		defer func() { So(server.Close(), ShouldBeNil) }()
+		connection, err := server.Connect(context.Background(), connector)
+		So(err, ShouldBeNil)
+		session, err := connection.NewSession(context.Background(), newTestTerminal(10, 2))
+		So(err, ShouldBeNil)
+
+		deadline := time.Now().Add(time.Second)
+		lastEvent := func() tuicast.TerminalEvent {
+			history := session.EventsAfter(0)
+			if len(history) == 0 {
+				return tuicast.TerminalEvent{}
+			}
+			return history[len(history)-1]
+		}
+		for lastEvent().Type != tuicast.EventBell && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		So(lastEvent(), ShouldResemble, tuicast.TerminalEvent{Sequence: 257, Type: tuicast.EventBell})
+		counts := session.UnsupportedSequences()
+		So(counts, ShouldHaveLength, 256)
+		So(counts[0], ShouldResemble, tuicast.UnsupportedSequence{Sequence: "CSI ? 3000 h", Count: 2})
+		So(counts[255], ShouldResemble, tuicast.UnsupportedSequence{Sequence: "CSI ? 3255 h", Count: 1})
 	})
 
 	Convey("Screens emits the initial and changed snapshots and closes on cancellation", t, func() {

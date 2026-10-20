@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/castingcode/tuicast"
+	"github.com/castingcode/tuicast/trace"
 	"github.com/castingcode/tuicast/workbench"
 )
 
@@ -98,6 +100,42 @@ type managedConnection struct {
 type managedSession struct {
 	session *tuicast.Session
 	info    SessionInfo
+	failure *tuicast.WaitError
+}
+
+// FailureDumpInfo is the flight-recorder dump of a session's most recent
+// failed wait. The readable format lists the recorded host output with Go
+// escapes, such as \x1b for ESC; the jsonl format returns Dump, the same
+// JSON-lines trace the driver SDKs receive, for saving or replay.
+type FailureDumpInfo struct {
+	SessionID          uint64                `json:"sessionId"`
+	Expected           string                `json:"expected"`
+	Cause              string                `json:"cause"`
+	LastScreenRevision uint64                `json:"lastScreenRevision"`
+	Terminal           string                `json:"terminal,omitempty"`
+	Width              int                   `json:"width,omitempty"`
+	Height             int                   `json:"height,omitempty"`
+	DroppedBytes       uint64                `json:"droppedBytes,omitempty"`
+	Records            []FlightRecordInfo    `json:"records,omitempty"`
+	Unsupported        []UnsupportedSequence `json:"unsupported,omitempty"`
+	Dump               string                `json:"dump,omitempty"`
+}
+
+// FlightRecordInfo is one recorded read of host output or one resize.
+// Revision is the screen revision after the output was applied.
+type FlightRecordInfo struct {
+	Type               string  `json:"type"`
+	OffsetMilliseconds float64 `json:"offsetMilliseconds"`
+	Text               string  `json:"text,omitempty"`
+	Revision           uint64  `json:"revision,omitempty"`
+	Width              int     `json:"width,omitempty"`
+	Height             int     `json:"height,omitempty"`
+}
+
+// UnsupportedSequence counts one sequence the terminal ignored.
+type UnsupportedSequence struct {
+	Sequence string `json:"sequence"`
+	Count    uint64 `json:"count"`
 }
 
 // EventInfo is one terminal event. Type is "bell", "enquiry", or
@@ -311,6 +349,7 @@ func (s *Service) WaitForText(ctx context.Context, sessionID uint64, text string
 	defer cancel()
 	screen, err := session.WaitFor(waitCtx, tuicast.ScreenContains(text))
 	if err != nil {
+		s.rememberFailure(sessionID, err)
 		return ScreenInfo{}, fmt.Errorf("waiting for MCP screen text in session %d: %w", sessionID, err)
 	}
 	s.record(sessionID, workbench.Step{Action: "waitForText", Text: text, TimeoutMilliseconds: timeout.Milliseconds()})
@@ -344,6 +383,7 @@ func (s *Service) Wait(ctx context.Context, sessionID uint64, matcher tuicast.Ma
 		screen, err = session.WaitFor(waitCtx, screenMatcher)
 	}
 	if err != nil {
+		s.rememberFailure(sessionID, err)
 		return ScreenInfo{}, fmt.Errorf("waiting for MCP screen in session %d: %w", sessionID, err)
 	}
 	s.record(sessionID, workbench.Step{
@@ -370,6 +410,7 @@ func (s *Service) WaitForIdle(ctx context.Context, sessionID uint64, quiet, time
 	defer cancel()
 	screen, err := session.WaitForIdle(waitCtx, quiet)
 	if err != nil {
+		s.rememberFailure(sessionID, err)
 		return ScreenInfo{}, fmt.Errorf("waiting for idle MCP session %d: %w", sessionID, err)
 	}
 	s.record(sessionID, workbench.Step{
@@ -394,12 +435,88 @@ func (s *Service) WaitForEnd(ctx context.Context, sessionID uint64, timeout time
 	select {
 	case <-session.Done():
 	case <-waitCtx.Done():
-		return ScreenInfo{}, fmt.Errorf("waiting for MCP session %d to end: %w", sessionID, &tuicast.WaitError{
-			Expected: "session end", LastScreen: session.Screen(), Cause: waitCtx.Err(),
-		})
+		recording := session.FlightRecording()
+		err := &tuicast.WaitError{
+			Expected: "session end", LastScreen: session.Screen(), Cause: waitCtx.Err(), Recording: &recording,
+		}
+		s.rememberFailure(sessionID, err)
+		return ScreenInfo{}, fmt.Errorf("waiting for MCP session %d to end: %w", sessionID, err)
 	}
 	s.record(sessionID, workbench.Step{Action: "waitForEnd", TimeoutMilliseconds: timeout.Milliseconds()})
 	return screenInfo(sessionID, session, session.Screen()), nil
+}
+
+// rememberFailure keeps a failed wait so FailureDump can return its flight
+// recording.
+func (s *Service) rememberFailure(sessionID uint64, err error) {
+	var waitErr *tuicast.WaitError
+	if !errors.As(err, &waitErr) || waitErr.Recording == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if managed, ok := s.sessions[sessionID]; ok {
+		managed.failure = waitErr
+		s.sessions[sessionID] = managed
+	}
+}
+
+// FailureDump returns the flight-recorder dump of the session's most recent
+// failed wait. Format "readable" (the default) lists the recorded output;
+// format "jsonl" returns the JSON-lines trace in Dump.
+func (s *Service) FailureDump(sessionID uint64, format string) (FailureDumpInfo, error) {
+	if _, err := s.findSession(sessionID); err != nil {
+		return FailureDumpInfo{}, err
+	}
+	s.mu.RLock()
+	failure := s.sessions[sessionID].failure
+	s.mu.RUnlock()
+	if failure == nil {
+		return FailureDumpInfo{}, fmt.Errorf("reading MCP failure dump: session %d has no failed wait", sessionID)
+	}
+	info := FailureDumpInfo{
+		SessionID:          sessionID,
+		Expected:           failure.Expected,
+		LastScreenRevision: failure.LastScreen.Revision,
+	}
+	if failure.Cause != nil {
+		info.Cause = failure.Cause.Error()
+	}
+	switch format {
+	case "jsonl":
+		var dump strings.Builder
+		if err := trace.WriteDump(&dump, failure); err != nil {
+			return FailureDumpInfo{}, fmt.Errorf("reading MCP failure dump: %w", err)
+		}
+		info.Dump = dump.String()
+		return info, nil
+	case "", "readable":
+	default:
+		return FailureDumpInfo{}, fmt.Errorf("reading MCP failure dump: format must be readable or jsonl")
+	}
+	recording := failure.Recording
+	info.Terminal = string(recording.Profile)
+	info.Width, info.Height = recording.Width, recording.Height
+	info.DroppedBytes = recording.DroppedBytes
+	info.Records = make([]FlightRecordInfo, 0, len(recording.Records))
+	for _, record := range recording.Records {
+		entry := FlightRecordInfo{
+			Type:               string(record.Type),
+			OffsetMilliseconds: float64(record.Offset.Microseconds()) / 1000,
+		}
+		if record.Type == tuicast.FlightOutput {
+			quoted := strconv.Quote(string(record.Data))
+			entry.Text = quoted[1 : len(quoted)-1]
+			entry.Revision = record.Revision
+		} else {
+			entry.Width, entry.Height = record.Width, record.Height
+		}
+		info.Records = append(info.Records, entry)
+	}
+	for _, sequence := range recording.Unsupported {
+		info.Unsupported = append(info.Unsupported, UnsupportedSequence{Sequence: sequence.Sequence, Count: sequence.Count})
+	}
+	return info, nil
 }
 
 // Type sends literal text to a terminal session. When the session is

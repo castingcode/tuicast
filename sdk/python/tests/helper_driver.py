@@ -69,7 +69,13 @@ for line in sys.stdin:
             response["error"] = {
                 "code": -32000,
                 "message": "timed out",
-                "data": {"kind": "timeout", "expected": "MISSING", "screen": screen()},
+                "data": {
+                    "kind": "timeout",
+                    "expected": "MISSING",
+                    "screen": screen(),
+                    "dump": '{"type":"header"}\n',
+                    "dumpPath": "/tmp/tuicast-session-1-1.jsonl",
+                },
             }
         else:
             response["result"] = screen()

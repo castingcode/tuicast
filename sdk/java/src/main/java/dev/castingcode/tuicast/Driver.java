@@ -129,7 +129,9 @@ public final class Driver implements AutoCloseable {
             rpc,
             d.path("kind").asText(),
             d.path("expected").asText(),
-            JSON.treeToValue(d.get("screen"), Screen.class));
+            JSON.treeToValue(d.get("screen"), Screen.class),
+            d.hasNonNull("dump") ? d.get("dump").asText() : null,
+            d.hasNonNull("dumpPath") ? d.get("dumpPath").asText() : null);
       } catch (Exception ignored) {
       }
     }

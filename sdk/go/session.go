@@ -586,7 +586,15 @@ type WaitError struct {
 	Kind       string
 	Expected   string
 	LastScreen Screen
-	Cause      error
+	// Dump is the driver's flight-recorder dump for the failure in JSON-lines
+	// trace format: the most recent host output (up to 64 KiB) with timing
+	// and screen revisions, unsupported-sequence counts, and the failure.
+	// Save it with a test report to diagnose the failure later.
+	Dump string
+	// DumpPath is the file holding the same dump when the driver runs with
+	// -dump-dir.
+	DumpPath string
+	Cause    error
 }
 
 func (e *WaitError) Error() string {

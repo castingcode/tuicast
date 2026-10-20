@@ -119,7 +119,10 @@ appear and disappear. The live page should show reconnecting/disconnected
 state using native `EventSource` callbacks and update dimensions, cursor,
 revision, and the host-set window title beside the screen. The title comes from
 the screen stream rather than `/api/state`, because snapshots exclude screen
-contents.
+contents. Below the screen, the live page lists the sequences the terminal
+ignored and how often each was received, refreshed from `/api/state` every two
+seconds. Snapshots include these counts because sequence names never contain
+control-string content; see [`troubleshooting.md`](troubleshooting.md).
 
 ## Verification plan
 
