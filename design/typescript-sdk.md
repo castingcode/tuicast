@@ -12,8 +12,11 @@ SSH authentication and exactly one host-key policy are validated locally.
 Connections open VT220 80x24 sessions by default, or callers can select
 `xterm-256color`, dimensions, and ENQ answerback. `Session` supports text and
 byte input, named keys/modifiers, resizing, detached screens, recursive
-matchers, stable and idle waits, and screen/event subscriptions as
-`AsyncIterable`s. Screen updates coalesce; terminal events use an ordered
+matchers, stable and idle waits, session-end state (`state()` and
+`waitForEnd()`), and screen/event subscriptions as `AsyncIterable`s. `Color`
+and `Attributes` name cell palette indexes and attribute bits, and
+`hasAttributes(cell, mask)` checks that every requested attribute is set.
+Screen updates coalesce; terminal events use an ordered
 64-item bounded queue. All operations accept `AbortSignal` and millisecond
 timeouts. `RPCError` and `WaitError` preserve structured driver diagnostics.
 All lifecycle `close()` methods are idempotent.

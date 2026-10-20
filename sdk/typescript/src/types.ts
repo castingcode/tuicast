@@ -52,6 +52,18 @@ export const Attributes = {
   Reverse: 8,
   Conceal: 16,
 } as const;
+/** Palette indexes for cell colors. `Default` selects the terminal default. */
+export const Color = {
+  Default: -1,
+  Black: 0,
+  Red: 1,
+  Green: 2,
+  Yellow: 3,
+  Blue: 4,
+  Magenta: 5,
+  Cyan: 6,
+  White: 7,
+} as const;
 export interface Cell {
   readonly text: string;
   readonly width: number;
@@ -59,6 +71,9 @@ export interface Cell {
   readonly background: number;
   readonly attributes: number;
 }
+/** Reports whether a cell has all of the requested `Attributes` bits set. */
+export const hasAttributes = (cell: Cell, attributes: number): boolean =>
+  (cell.attributes & attributes) === attributes;
 export interface Cursor {
   readonly column: number;
   readonly row: number;
@@ -75,6 +90,7 @@ export interface ScreenData {
   cursor: Cursor;
   revision: number;
   text: string;
+  title?: string;
 }
 export type Matcher =
   | { contains: string }
@@ -93,10 +109,23 @@ export const cursorAt = (column: number, row: number): Matcher => ({
 export const all = (...children: Matcher[]): Matcher => ({ all: children });
 export const any = (...children: Matcher[]): Matcher => ({ any: children });
 export const not = (child: Matcher): Matcher => ({ not: child });
+/**
+ * A BELL, ENQ, or unsupported-sequence event. `data` is the configured
+ * answerback for an enquiry and the ignored sequence, such as
+ * `"CSI ? 2004 h"`, for an unsupported event.
+ */
 export interface TerminalEvent {
   readonly sequence: number;
-  readonly type: "bell" | "enquiry";
+  readonly type: "bell" | "enquiry" | "unsupported";
   readonly data?: string;
+}
+/**
+ * Whether the host has ended a session. `error` describes the transport or
+ * terminal failure that ended it and is absent after a normal end.
+ */
+export interface SessionState {
+  readonly ended: boolean;
+  readonly error?: string;
 }
 export interface TelnetConfig {
   protocol: "telnet";

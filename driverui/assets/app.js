@@ -94,7 +94,7 @@ async function startSession(id) {
     <div class="page-actions"><a class="back" href="/">← All sessions</a><a id="open-workbench" class="button-link hidden" href="/workbench/sessions/${id}">Open Workbench</a></div>
     <section class="session-heading">
       <div><p class="eyebrow">Live terminal</p><h1>Session ${id}</h1></div>
-      <dl><div><dt>Terminal</dt><dd>${escapeHTML(metadata.terminal)}</dd></div><div><dt>Size</dt><dd id="size">${metadata.width} × ${metadata.height}</dd></div><div><dt>Revision</dt><dd id="revision">${metadata.revision}</dd></div><div><dt>Stream</dt><dd id="stream-state" class="online-text">Connecting</dd></div></dl>
+      <dl><div><dt>Terminal</dt><dd>${escapeHTML(metadata.terminal)}</dd></div><div><dt>Size</dt><dd id="size">${metadata.width} × ${metadata.height}</dd></div><div><dt>Revision</dt><dd id="revision">${metadata.revision}</dd></div><div class="title-item"><dt>Window title</dt><dd id="title" class="muted-text">None</dd></div><div><dt>Stream</dt><dd id="stream-state" class="online-text">Connecting</dd></div></dl>
     </section>
     <section class="terminal-frame" aria-label="Session ${id} terminal screen"><pre id="screen">Waiting for screen…</pre></section>`;
 
@@ -108,6 +108,10 @@ async function startSession(id) {
     document.querySelector("#screen").textContent = screen.text;
     document.querySelector("#size").textContent = `${screen.width} × ${screen.height}`;
     document.querySelector("#revision").textContent = screen.revision;
+    const title = document.querySelector("#title");
+    title.textContent = screen.title || "None";
+    title.title = screen.title || "";
+    title.className = screen.title ? "" : "muted-text";
     streamState.textContent = "Connected";
     streamState.className = "online-text";
   });

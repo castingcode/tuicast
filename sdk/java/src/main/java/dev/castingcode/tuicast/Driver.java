@@ -9,7 +9,9 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 
 public final class Driver implements AutoCloseable {
-  static final ObjectMapper JSON = new ObjectMapper();
+  // Newer drivers may add result fields within the same protocol version.
+  static final ObjectMapper JSON =
+      new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
   private final Process process;
   private final BufferedWriter input;
   private final Duration timeout;

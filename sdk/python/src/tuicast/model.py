@@ -98,6 +98,8 @@ class Screen:
     cursor: Cursor
     revision: int
     text: str
+    title: str = ""
+    """Window title most recently set by the host; empty when unset."""
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> Screen:
@@ -117,6 +119,7 @@ class Screen:
             cursor=Cursor(**value["cursor"]),
             revision=int(value["revision"]),
             text=str(value["text"]),
+            title=str(value.get("title", "")),
         )
 
     def contains(self, text: str) -> bool:
@@ -160,7 +163,30 @@ class Screen:
 
 
 @dataclass(frozen=True, slots=True)
+class SessionState:
+    """Whether the host has ended a session.
+
+    ``error`` describes the transport or terminal failure that ended the
+    session; it is ``None`` while the session is active and after a normal end.
+    """
+
+    ended: bool
+    error: str | None = None
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> SessionState:
+        return cls(ended=value["state"] == "ended", error=value.get("error") or None)
+
+
+@dataclass(frozen=True, slots=True)
 class TerminalEvent:
+    """A BELL, ENQ, or unsupported-sequence event.
+
+    ``type`` is ``"bell"``, ``"enquiry"``, or ``"unsupported"``. ``data`` is the
+    configured answerback for an enquiry and the ignored sequence, such as
+    ``"CSI ? 2004 h"``, for an unsupported event.
+    """
+
     sequence: int
     type: str
     data: str = ""

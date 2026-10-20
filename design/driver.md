@@ -70,8 +70,10 @@ sessions, and connections.
 | `session.screen` | Return the current detached screen snapshot. |
 | `session.wait` | Wait for a serializable matcher, optionally until stable. |
 | `session.waitForIdle` | Wait until host output has been quiet for a period. |
+| `session.state` | Report whether a session is active or has ended. |
+| `session.waitForEnd` | Wait until the host ends a session. |
 | `session.subscribe` | Subscribe to coalesced screen revisions. |
-| `session.subscribeEvents` | Subscribe to BELL and ENQ terminal events. |
+| `session.subscribeEvents` | Subscribe to BELL, ENQ, and unsupported-sequence terminal events, starting with recent retained events. |
 | `session.unsubscribe` | Cancel a screen or event subscription. |
 
 ### Connections
@@ -159,12 +161,36 @@ Available expressions are `contains`, `line` (`row` and exact `text`),
 including terminal controls that do not visibly change the screen. It returns
 the screen captured at the end of the quiet period.
 
+### Session end
+
+A session ends when the host closes it, such as after a sign-out, or when a
+transport or terminal failure stops it. An ended session stays registered
+until `session.close` or `connection.close`, so clients can still read its
+final screen. Input to an ended session fails, and screen waits fail with a
+`session ended` cause.
+
+`session.state` returns the session's state without waiting:
+
+```json
+{"state": "ended", "error": "reading terminal output: connection reset by peer"}
+```
+
+`state` is `active` or `ended`. `error` is present only when a failure ended
+the session; it is absent when the host closed the session normally.
+
+`session.waitForEnd` requires a positive `timeoutMilliseconds` and returns the
+same result once the session ends. If the session is still active at the
+timeout, it fails like `session.wait`, with wait-error data whose `expected`
+value is `session end`.
+
 ### Screens and subscriptions
 
 Screen results contain `width`, `height`, `revision`, `text`, `cursor`, and the
 row-major `cells` array. Colors use TUICast palette indexes, with `-1` meaning
 the terminal default. Attributes are the bitmask defined by the Go `Attributes`
-type.
+type. `title` holds the window title the host most recently set with OSC 0 or
+2 and is omitted when there is none; only the `xterm-256color` profile supports
+titles.
 
 `session.subscribe` returns a `subscriptionId`. The driver then emits JSON-RPC
 notifications, beginning with the current snapshot:
@@ -185,10 +211,19 @@ Slow consumers may skip intermediate revisions but receive the newest available
 screen.
 
 `session.subscribeEvents` uses the same subscription lifecycle and emits
-`session.event` notifications. Event types are `bell` and `enquiry`; enquiry
-events include the configured answerback in `data`. Event sequence numbers are
+`session.event` notifications. Event types are `bell`, `enquiry`, and
+`unsupported`. Enquiry events include the configured answerback in `data`;
+unsupported events name the ignored sequence, such as `CSI ? 2004 h`, and are
+sent once per distinct sequence (see
+[`terminal-behavior.md`](terminal-behavior.md#unsupported-sequences)). Event sequence numbers are
 monotonic within a session. The driver sends the answerback to the host before
 publishing the enquiry event.
+
+An event subscription starts, after its response, with up to the 64 most recent
+events the session retains, followed by live events without gaps or
+duplicates. A late subscriber therefore still sees startup events such as
+unsupported sequences. The limit matches the SDKs' 64-event subscription
+buffers; the first sequence number shows whether older events were omitted.
 
 The Go SDK exposes these methods through `Session.Subscribe` and
 `Session.SubscribeEvents`. Screen subscriptions coalesce unread revisions.

@@ -42,8 +42,8 @@ type Recording struct {
 }
 
 // Step is one recorded terminal operation. Workbench records waitForText,
-// type, and press steps; MCP recordings may also contain wait and waitForIdle
-// steps.
+// type, and press steps; MCP recordings may also contain wait, waitForIdle,
+// and waitForEnd steps.
 type Step struct {
 	Action              string               `json:"action"`
 	Text                string               `json:"text,omitempty"`

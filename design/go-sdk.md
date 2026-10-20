@@ -118,6 +118,18 @@ Prefer `WaitForText` or a composite matcher when possible. A continuously
 updating terminal may never become idle, while a temporarily quiet terminal is
 not necessarily ready for the next action.
 
+`State` reports whether the host has ended a session, and `WaitForEnd` waits
+for that to happen, such as after a sign-out. `SessionState.Error` is set only
+when a transport or terminal failure ended the session. An ended session's
+final screen remains readable until it is closed:
+
+```go
+state, err := session.WaitForEnd(ctx, tuicast.WaitTimeout(5*time.Second))
+if state.Error != "" {
+    t.Fatalf("session failed: %s", state.Error)
+}
+```
+
 `Screen` methods are immediate queries over one detached snapshot:
 
 ```go

@@ -62,6 +62,9 @@ type Screen struct {
 	Cells    []Cell
 	Cursor   Cursor
 	Revision uint64
+	// Title is the window title most recently set by the host. It is empty
+	// when the host has not set one or the terminal profile has no titles.
+	Title string
 }
 
 // CellAt returns the cell at a zero-based position.

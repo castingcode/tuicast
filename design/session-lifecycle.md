@@ -111,8 +111,12 @@ for screen := range session.Screens(ctx) {
 }
 ```
 
-`Session.Events` separately observes non-screen controls such as BELL and ENQ.
-Events carry session-monotonic sequence numbers. ENQ causes the session to send
+`Session.Events` separately observes non-screen controls such as BELL and ENQ,
+and reports each distinct sequence the terminal ignored as an
+`EventUnsupported` event, which the session also logs at `Warn`. Events carry
+session-monotonic sequence numbers. ENQ causes the session to send
 the terminal's configured answerback before publishing the event. Event
 subscribers are buffered; a subscriber that cannot keep up is closed rather
-than blocking terminal output processing.
+than blocking terminal output processing. `Session.EventsAfter` returns the
+session's most recent 256 events after a sequence number, including events
+published before any subscriber existed or that a closed subscriber missed.

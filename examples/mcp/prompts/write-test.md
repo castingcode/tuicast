@@ -27,8 +27,9 @@ opening an order shows its details with status `HOLD`.
    `tuicast_wait_for_idle` only where no specific text marks readiness.
 4. Stop the recording and translate each recorded step into the matching SDK
    call: `type` to typing text, `press` to pressing a key, `waitForText` and
-   `wait` to the SDK's wait with an equivalent matcher, and `waitForIdle` to
-   its idle wait. Keep the recorded timeouts and stable periods.
+   `wait` to the SDK's wait with an equivalent matcher, `waitForIdle` to its
+   idle wait, and `waitForEnd` to its wait for the session to end. Keep the
+   recorded timeouts and stable periods.
 5. Read the passwords from the `TUICAST_REFERENCE_PASSWORD` and
    `TUICAST_REFERENCE_APP_PASSWORD` environment variables, and the address from
    `TUICAST_REFERENCE_ADDRESS`, instead of embedding them in the test.

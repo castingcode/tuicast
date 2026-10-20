@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -45,13 +46,16 @@ type Session struct {
 	eventSequence       uint64
 	nextEventSubscriber uint64
 	eventSubscribers    map[uint64]chan TerminalEvent
+	eventHistory        []TerminalEvent
 	closeOnce           sync.Once
 	onClose             func(*Session)
+	logger              *slog.Logger
 }
 
-func newSession(id uint64, terminal Terminal, stream SessionStream, onClose func(*Session)) *Session {
+func newSession(id uint64, terminal Terminal, stream SessionStream, onClose func(*Session), logger *slog.Logger) *Session {
 	return &Session{
 		id:               id,
+		logger:           logger,
 		terminal:         terminal,
 		stream:           stream,
 		changed:          make(chan struct{}),
@@ -349,6 +353,24 @@ func (s *Session) Events(ctx context.Context) <-chan TerminalEvent {
 	return events
 }
 
+// EventsAfter returns the session's retained events whose sequence numbers
+// are greater than sequence, oldest first. A session retains its most recent
+// 256 events, including events published before any Events subscriber
+// existed or that a slow subscriber missed. Sequence numbers are contiguous,
+// so a gap before the first returned event shows how many are no longer
+// retained.
+func (s *Session) EventsAfter(sequence uint64) []TerminalEvent {
+	s.eventMu.Lock()
+	defer s.eventMu.Unlock()
+	events := make([]TerminalEvent, 0, len(s.eventHistory))
+	for _, event := range s.eventHistory {
+		if event.Sequence > sequence {
+			events = append(events, event)
+		}
+	}
+	return events
+}
+
 // Done is closed when the remote session ends or Close completes.
 func (s *Session) Done() <-chan struct{} {
 	return s.done
@@ -402,6 +424,9 @@ func (s *Session) readLoop() {
 							terminalErr = fmt.Errorf("sending terminal answerback: %w", err)
 							break
 						}
+					}
+					if event.Type == EventUnsupported {
+						s.logger.Warn("ignored unsupported terminal sequence", "session_id", s.id, "sequence", event.Data)
 					}
 					s.publishEvent(event)
 				}
@@ -468,10 +493,17 @@ func (s *Session) signalOutput() {
 	s.stateMu.Unlock()
 }
 
+// retainedEvents bounds the history returned by EventsAfter.
+const retainedEvents = 256
+
 func (s *Session) publishEvent(event TerminalEvent) {
 	s.eventMu.Lock()
 	s.eventSequence++
 	event.Sequence = s.eventSequence
+	if len(s.eventHistory) == retainedEvents {
+		s.eventHistory = append(s.eventHistory[:0], s.eventHistory[1:]...)
+	}
+	s.eventHistory = append(s.eventHistory, event)
 	for id, subscriber := range s.eventSubscribers {
 		select {
 		case subscriber <- event:

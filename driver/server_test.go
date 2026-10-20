@@ -14,6 +14,7 @@ import (
 	"github.com/castingcode/tuicast"
 	"github.com/castingcode/tuicast/memory"
 	"github.com/castingcode/tuicast/vt220"
+	"github.com/castingcode/tuicast/xterm"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -211,7 +212,7 @@ func TestDriverProtocol(t *testing.T) {
 		}, writer, make(chan struct{}, 1))
 		_, responseErr = server.send(raw(map[string]any{
 			"sessionId": sessionID,
-			"base64":    "BwU=",
+			"base64":    "BwUbWz8xMjM0aA==",
 		}))
 		So(responseErr, ShouldBeNil)
 
@@ -222,19 +223,159 @@ func TestDriverProtocol(t *testing.T) {
 		So(output.String(), ShouldContainSubstring, `"type":"bell"`)
 		So(output.String(), ShouldContainSubstring, `"type":"enquiry"`)
 		So(output.String(), ShouldContainSubstring, `"data":"TUICAST"`)
+		for !strings.Contains(output.String(), `"type":"unsupported"`) && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		So(output.String(), ShouldContainSubstring, `"type":"unsupported","data":"CSI ? 1234 h"`)
+	})
+
+	Convey("Event subscriptions start with the most recent retained events", t, func() {
+		server := newTestDriver()
+		defer server.Close()
+		opened, responseErr := server.openConnection(raw(map[string]any{"protocol": "memory", "address": "reference"}))
+		So(responseErr, ShouldBeNil)
+		connectionID := opened.(map[string]uint64)["connectionId"]
+		opened, responseErr = server.openSession(raw(map[string]any{
+			"connectionId": connectionID,
+			"terminal":     string(tuicast.ProfileVT220),
+			"width":        20,
+			"height":       2,
+		}))
+		So(responseErr, ShouldBeNil)
+		sessionID := opened.(map[string]uint64)["sessionId"]
+		session, responseErr := server.getSession(sessionID)
+		So(responseErr, ShouldBeNil)
+
+		_, responseErr = server.send(raw(map[string]any{"sessionId": sessionID, "text": strings.Repeat("\a", 70)}))
+		So(responseErr, ShouldBeNil)
+		deadline := time.Now().Add(time.Second)
+		for len(session.EventsAfter(0)) < 70 && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		So(session.EventsAfter(0), ShouldHaveLength, 70)
+
+		var output synchronizedBuffer
+		server.serve(request{
+			JSONRPC: "2.0",
+			ID:      json.RawMessage("1"),
+			Method:  "session.subscribeEvents",
+			Params:  raw(map[string]uint64{"sessionId": sessionID}),
+		}, newRPCWriter(&output), make(chan struct{}, 1))
+		_, responseErr = server.send(raw(map[string]any{"sessionId": sessionID, "text": "\a"}))
+		So(responseErr, ShouldBeNil)
+		for !strings.Contains(output.String(), `"sequence":71,`) && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+
+		text := output.String()
+		So(text, ShouldNotContainSubstring, `"sequence":6,`)
+		So(strings.Count(text, `"sequence":7,"type":"bell"`), ShouldEqual, 1)
+		So(strings.Count(text, `"sequence":70,"type":"bell"`), ShouldEqual, 1)
+		So(strings.Count(text, `"sequence":71,"type":"bell"`), ShouldEqual, 1)
+		So(strings.Index(text, `"sequence":7,`), ShouldBeLessThan, strings.Index(text, `"sequence":70,`))
+		So(strings.Index(text, `"sequence":70,`), ShouldBeLessThan, strings.Index(text, `"sequence":71,`))
+	})
+
+	Convey("Screen results include the host-set window title", t, func() {
+		server := newTestDriver()
+		defer server.Close()
+		opened, responseErr := server.openConnection(raw(map[string]any{"protocol": "memory", "address": "reference"}))
+		So(responseErr, ShouldBeNil)
+		connectionID := opened.(map[string]uint64)["connectionId"]
+		opened, responseErr = server.openSession(raw(map[string]any{
+			"connectionId": connectionID,
+			"terminal":     string(tuicast.ProfileXTerm),
+			"width":        10,
+			"height":       2,
+		}))
+		So(responseErr, ShouldBeNil)
+		sessionID := opened.(map[string]uint64)["sessionId"]
+
+		_, responseErr = server.send(raw(map[string]any{"sessionId": sessionID, "text": "\x1b]2;RF-01\aREADY"}))
+		So(responseErr, ShouldBeNil)
+		ready := "READY"
+		result, responseErr := server.wait(raw(map[string]any{
+			"sessionId":           sessionID,
+			"matcher":             Matcher{Contains: &ready},
+			"timeoutMilliseconds": 1000,
+		}))
+		So(responseErr, ShouldBeNil)
+		So(result.(screenResult).Title, ShouldEqual, "RF-01")
+		encoded, err := json.Marshal(result)
+		So(err, ShouldBeNil)
+		So(string(encoded), ShouldContainSubstring, `"title":"RF-01"`)
+	})
+
+	Convey("Session state reports when the host ends the session", t, func() {
+		server := newTestDriverWithHost(func(_ context.Context, remote io.ReadWriteCloser) {
+			_, _ = remote.Write([]byte("BYE"))
+			_, _ = io.ReadFull(remote, make([]byte, 1))
+			_ = remote.Close()
+		})
+		defer server.Close()
+		opened, responseErr := server.openConnection(raw(map[string]any{"protocol": "memory", "address": "reference"}))
+		So(responseErr, ShouldBeNil)
+		connectionID := opened.(map[string]uint64)["connectionId"]
+		opened, responseErr = server.openSession(raw(map[string]any{
+			"connectionId": connectionID,
+			"terminal":     string(tuicast.ProfileVT220),
+			"width":        10,
+			"height":       2,
+		}))
+		So(responseErr, ShouldBeNil)
+		sessionID := opened.(map[string]uint64)["sessionId"]
+
+		result, responseErr := server.sessionState(raw(map[string]uint64{"sessionId": sessionID}))
+		So(responseErr, ShouldBeNil)
+		So(result, ShouldResemble, sessionStateResult{State: "active"})
+
+		bye := "BYE"
+		_, responseErr = server.wait(raw(map[string]any{
+			"sessionId":           sessionID,
+			"matcher":             Matcher{Contains: &bye},
+			"timeoutMilliseconds": 1000,
+		}))
+		So(responseErr, ShouldBeNil)
+		_, responseErr = server.waitForEnd(raw(map[string]any{"sessionId": sessionID, "timeoutMilliseconds": 10}))
+		So(responseErr.Code, ShouldEqual, -32000)
+		So(responseErr.Data.(waitErrorData).Kind, ShouldEqual, "timeout")
+		So(responseErr.Data.(waitErrorData).Expected, ShouldEqual, "session end")
+		So(responseErr.Data.(waitErrorData).Screen.Text, ShouldContainSubstring, "BYE")
+		_, responseErr = server.waitForEnd(raw(map[string]any{"sessionId": sessionID, "timeoutMilliseconds": 0}))
+		So(responseErr.Code, ShouldEqual, -32602)
+
+		_, responseErr = server.send(raw(map[string]any{"sessionId": sessionID, "text": "q"}))
+		So(responseErr, ShouldBeNil)
+		result, responseErr = server.waitForEnd(raw(map[string]any{"sessionId": sessionID, "timeoutMilliseconds": 1000}))
+		So(responseErr, ShouldBeNil)
+		So(result, ShouldResemble, sessionStateResult{State: "ended"})
+		result, responseErr = server.sessionState(raw(map[string]uint64{"sessionId": sessionID}))
+		So(responseErr, ShouldBeNil)
+		So(result, ShouldResemble, sessionStateResult{State: "ended"})
+		So(server.DriverSnapshot().Sessions[0].State, ShouldEqual, "ended")
+		result, responseErr = server.screen(raw(map[string]uint64{"sessionId": sessionID}))
+		So(responseErr, ShouldBeNil)
+		So(result.(screenResult).Text, ShouldContainSubstring, "BYE")
 	})
 }
 
 func newTestDriver() *Server {
+	return newTestDriverWithHost(func(_ context.Context, remote io.ReadWriteCloser) {
+		_, _ = io.Copy(remote, remote)
+	})
+}
+
+func newTestDriverWithHost(host func(context.Context, io.ReadWriteCloser)) *Server {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server, err := New(
 		logger,
 		func(ConnectionOptions) (tuicast.Connector, error) {
-			return memory.NewConnector(func(_ context.Context, remote io.ReadWriteCloser) {
-				_, _ = io.Copy(remote, remote)
-			})
+			return memory.NewConnector(host)
 		},
-		func(_ string, width, height int) (tuicast.Terminal, error) {
+		func(profile string, width, height int) (tuicast.Terminal, error) {
+			if profile == string(tuicast.ProfileXTerm) {
+				return xterm.New(width, height)
+			}
 			return vt220.New(width, height)
 		},
 	)

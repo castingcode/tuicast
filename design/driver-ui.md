@@ -116,8 +116,10 @@ framework, generated assets, or frontend build step is warranted.
 
 Poll `/api/state` every two seconds on the index so connections and sessions
 appear and disappear. The live page should show reconnecting/disconnected
-state using native `EventSource` callbacks and update dimensions, cursor, and
-revision beside the screen.
+state using native `EventSource` callbacks and update dimensions, cursor,
+revision, and the host-set window title beside the screen. The title comes from
+the screen stream rather than `/api/state`, because snapshots exclude screen
+contents.
 
 ## Verification plan
 

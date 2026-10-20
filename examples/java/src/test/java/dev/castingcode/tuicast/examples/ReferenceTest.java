@@ -131,10 +131,21 @@ class ReferenceTest {
     open(e, 11, "BELL / ENQ ANSWERBACK");
     try (var events = e.subscribeEvents()) {
       e.press('b');
-      assertEquals("bell", events.take(Duration.ofSeconds(1)).type());
+      var bell = nextEvent(events);
+      assertEquals("bell", bell.type());
       e.press('e');
-      assertEquals("TUICAST-ANSWER", events.take(Duration.ofSeconds(1)).data());
+      var enquiry = nextEvent(events);
+      assertEquals("TUICAST-ANSWER", enquiry.data());
+      assertEquals(bell.sequence() + 1, enquiry.sequence());
     }
+  }
+
+  // Skips reports of sequences the terminal ignored at startup.
+  private static TerminalEvent nextEvent(Subscription<TerminalEvent> events) {
+    var event = events.take(Duration.ofSeconds(1));
+    while (event != null && "unsupported".equals(event.type()))
+      event = events.take(Duration.ofSeconds(1));
+    return event;
   }
 
   @Test

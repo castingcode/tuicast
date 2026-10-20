@@ -11,6 +11,7 @@ def screen(revision=3):
         "height": 1,
         "revision": revision,
         "text": "READY",
+        "title": "RF-01",
         "cursor": {"column": 0, "row": 0, "visible": True},
         "cells": [
             {"text": c, "width": 1, "foreground": -1, "background": -1, "attributes": 0}
@@ -56,6 +57,13 @@ for line in sys.stdin:
         response["result"] = {"sent": True}
     elif method == "session.waitForIdle":
         response["result"] = screen()
+    elif method == "session.state":
+        response["result"] = {"state": "active"}
+    elif method == "session.waitForEnd":
+        if request["params"] == {"sessionId": 22, "timeoutMilliseconds": 250}:
+            response["result"] = {"state": "ended", "error": "reading terminal output: reset"}
+        else:
+            response["error"] = {"code": -32602, "message": "unexpected waitForEnd parameters"}
     elif method == "session.wait":
         if request["params"]["matcher"] == {"contains": "MISSING"}:
             response["error"] = {
@@ -78,7 +86,7 @@ for line in sys.stdin:
                     }
                 )
         else:
-            for seq, typ in ((1, "bell"), (2, "enquiry")):
+            for seq, typ in ((1, "bell"), (2, "enquiry"), (3, "unsupported")):
                 send(
                     {
                         "jsonrpc": "2.0",

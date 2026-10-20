@@ -6,11 +6,14 @@ export class Screen {
   readonly cursor;
   readonly revision;
   readonly text;
+  /** Window title most recently set by the host; empty when unset. */
+  readonly title: string;
   constructor(data: ScreenData) {
     this.width = data.width;
     this.height = data.height;
     this.revision = data.revision;
     this.text = data.text;
+    this.title = data.title ?? "";
     this.cursor = Object.freeze({ ...data.cursor });
     this.cells = Object.freeze(data.cells.map((c) => Object.freeze({ ...c })));
     Object.freeze(this);

@@ -22,6 +22,7 @@ from .model import (
     Modifier,
     Position,
     Screen,
+    SessionState,
     Terminal,
     TerminalEvent,
     all_of,

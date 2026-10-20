@@ -4,6 +4,8 @@ package ansi
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"unicode"
 	"unicode/utf8"
@@ -57,7 +59,13 @@ type Terminal struct {
 	parser            *parsing.Parser
 	answerback        string
 	events            []tuicast.TerminalEvent
+	title             string
+	reported          map[string]struct{}
 }
+
+// maximumUnsupportedReports bounds the distinct unsupported sequences one
+// terminal remembers, because parameterized sequences can vary without limit.
+const maximumUnsupportedReports = 256
 
 // New creates a terminal engine for profile.
 func New(width, height int, profile Profile) (*Terminal, error) {
@@ -89,6 +97,11 @@ func New(width, height int, profile Profile) (*Terminal, error) {
 		Execute: terminal.execute,
 		CSI:     terminal.handleCSI,
 		Escape:  terminal.handleEscape,
+		OSC:     terminal.handleOSC,
+		DCS: func(command parsing.Command, parameters []parsing.Parameter, _ []byte) {
+			terminal.unsupported(describe("DCS", command, parameters))
+		},
+		ControlString: terminal.unsupported,
 	})
 	return terminal, nil
 }
@@ -323,6 +336,7 @@ func (t *Terminal) Snapshot() tuicast.Screen {
 		Cells:    cells,
 		Cursor:   t.active.cursor,
 		Revision: t.revision,
+		Title:    t.title,
 	}
 }
 
@@ -532,6 +546,12 @@ func (t *Terminal) execute(control byte) {
 		t.charset = 1
 	case 0x0f:
 		t.charset = 0
+	default:
+		// Unhandled C0 controls have no function on a VT220 and are ignored
+		// silently; NUL, for example, is common host padding.
+		if control >= 0x80 {
+			t.unsupported(fmt.Sprintf("C1 0x%02X", control))
+		}
 	}
 }
 
@@ -578,6 +598,8 @@ func (t *Terminal) handleEscape(command parsing.Command) {
 		t.charsets[0] = command.Final == '0'
 	case command.Intermediate == ')' && (command.Final == '0' || command.Final == 'B'):
 		t.charsets[1] = command.Final == '0'
+	case command.Intermediate != 0:
+		t.unsupported(describe("ESC", command, nil))
 	case command.Final == '7':
 		t.active.savedCursor = t.active.cursor
 	case command.Final == '8':
@@ -593,19 +615,91 @@ func (t *Terminal) handleEscape(command parsing.Command) {
 		t.reverseIndex()
 	case command.Final == 'c':
 		t.reset()
+	case command.Final == '=' || command.Final == '>':
+		// Keypad application and numeric modes affect only numeric keypad
+		// keys, which TUICast does not send.
+	case command.Final == '\\':
+		// The parser dispatches the string terminator that ends OSC, DCS,
+		// PM, APC, and SOS strings; on its own it has no effect.
+	default:
+		t.unsupported(describe("ESC", command, nil))
 	}
 }
 
-func (t *Terminal) handleCSI(command parsing.Command, parameters []parsing.Parameter) {
-	if command.Prefix == '?' && (command.Final == 'h' || command.Final == 'l') {
-		enabled := command.Final == 'h'
-		t.setCursorKeyMode(parameters, enabled)
-		if t.xterm {
-			t.setPrivateModes(parameters, enabled)
+func (t *Terminal) handleOSC(command int, data []byte) {
+	switch {
+	case t.xterm && (command == 0 || command == 2):
+		title := strings.ToValidUTF8(string(data), "\uFFFD")
+		if title != t.title {
+			t.title = title
+			t.changed()
 		}
+	case t.xterm && command == 1:
+		// The icon name has no counterpart in a screen snapshot.
+	case command < 0:
+		t.unsupported("OSC")
+	default:
+		t.unsupported(fmt.Sprintf("OSC %d", command))
+	}
+}
+
+// unsupported reports a sequence the terminal ignored. Each distinct sequence
+// is reported once so a host that repeats it on every redraw cannot flood
+// event subscribers.
+func (t *Terminal) unsupported(sequence string) {
+	if _, reported := t.reported[sequence]; reported || len(t.reported) >= maximumUnsupportedReports {
 		return
 	}
+	if t.reported == nil {
+		t.reported = make(map[string]struct{})
+	}
+	t.reported[sequence] = struct{}{}
+	t.events = append(t.events, tuicast.TerminalEvent{Type: tuicast.EventUnsupported, Data: sequence})
+}
+
+// describe formats a sequence in conventional notation, such as
+// "CSI ? 2004 h". Control string data is omitted because it can contain
+// screen text or other sensitive content.
+func describe(introducer string, command parsing.Command, parameters []parsing.Parameter) string {
+	var description strings.Builder
+	description.WriteString(introducer)
 	if command.Prefix != 0 {
+		description.WriteByte(' ')
+		description.WriteByte(command.Prefix)
+	}
+	if len(parameters) > 0 {
+		description.WriteByte(' ')
+		for index, parameter := range parameters {
+			if parameter.Present {
+				description.WriteString(strconv.Itoa(parameter.Value))
+			}
+			if index < len(parameters)-1 {
+				if parameter.More {
+					description.WriteByte(':')
+				} else {
+					description.WriteByte(';')
+				}
+			}
+		}
+	}
+	if command.Intermediate != 0 {
+		description.WriteByte(' ')
+		description.WriteByte(command.Intermediate)
+	}
+	description.WriteByte(' ')
+	description.WriteByte(command.Final)
+	return description.String()
+}
+
+func (t *Terminal) handleCSI(command parsing.Command, parameters []parsing.Parameter) {
+	if command.Prefix == '?' && command.Intermediate == 0 && (command.Final == 'h' || command.Final == 'l') {
+		t.setPrivateModes(command, parameters)
+		return
+	}
+	// No supported CSI command has a prefix or an intermediate byte, so
+	// dispatching on the final byte alone would misread such sequences.
+	if command.Prefix != 0 || command.Intermediate != 0 {
+		t.unsupported(describe("CSI", command, parameters))
 		return
 	}
 
@@ -644,11 +738,13 @@ func (t *Terminal) handleCSI(command parsing.Command, parameters []parsing.Param
 	case 'X':
 		t.eraseCharacters(param(parameters, 0, 1))
 	case 'h', 'l':
-		t.setModes(parameters, command.Final == 'h')
+		t.setModes(command, parameters)
 	case 'm':
 		t.setRendition(parameters)
 	case 'r':
 		t.setScrollRegion(parameters)
+	default:
+		t.unsupported(describe("CSI", command, parameters))
 	}
 }
 
@@ -769,55 +865,80 @@ func (t *Terminal) deleteLines(count int) {
 	t.changed()
 }
 
-func (t *Terminal) setModes(parameters []parsing.Parameter, enabled bool) {
-	for _, parameter := range parameters {
-		if parameter.Present && parameter.Value == 4 {
-			t.insertMode = enabled
-		}
-	}
-}
-
-func (t *Terminal) setCursorKeyMode(parameters []parsing.Parameter, enabled bool) {
-	for _, parameter := range parameters {
-		if parameter.Present && parameter.Value == 1 {
-			t.applicationCursor = enabled
-		}
-	}
-}
-
-func (t *Terminal) setPrivateModes(parameters []parsing.Parameter, enabled bool) {
+func (t *Terminal) setModes(command parsing.Command, parameters []parsing.Parameter) {
 	for _, parameter := range parameters {
 		if !parameter.Present {
 			continue
 		}
-		switch parameter.Value {
-		case 7:
+		if parameter.Value == 4 {
+			t.insertMode = command.Final == 'h'
+		} else {
+			t.unsupported(describe("CSI", command, []parsing.Parameter{parameter}))
+		}
+	}
+}
+
+func (t *Terminal) setPrivateModes(command parsing.Command, parameters []parsing.Parameter) {
+	enabled := command.Final == 'h'
+	for _, parameter := range parameters {
+		if !parameter.Present {
+			continue
+		}
+		switch {
+		case parameter.Value == 1:
+			t.applicationCursor = enabled
+		case parameter.Value == 7:
 			t.autoWrap = enabled
 			t.wrapPending = false
-		case 25:
+		case parameter.Value == 25:
 			t.main.cursor.Visible = enabled
 			if t.alternate.cells != nil {
 				t.alternate.cursor.Visible = enabled
 			}
 			t.changed()
-		case 47, 1047:
-			if enabled {
-				t.enterAlternate(parameter.Value == 1047)
-			} else {
-				t.exitAlternate()
-			}
-		case 1049:
-			if enabled {
-				t.main.savedCursor = t.main.cursor
-				t.enterAlternate(true)
-			} else {
-				t.exitAlternate()
-				visible := t.main.cursor.Visible
-				t.main.cursor = t.main.savedCursor
-				t.main.cursor.Visible = visible
-			}
+		case ignoredPrivateMode(parameter.Value):
+		case !t.xterm || !t.setXTermPrivateMode(parameter.Value, enabled):
+			t.unsupported(describe("CSI", command, []parsing.Parameter{parameter}))
 		}
 	}
+}
+
+// ignoredPrivateMode reports DEC private modes that are deliberately ignored
+// because they affect only cursor blinking or mouse, focus, and paste input,
+// none of which TUICast represents or sends.
+func ignoredPrivateMode(mode int) bool {
+	switch mode {
+	case 12, 1000, 1002, 1003, 1004, 1005, 1006, 1015, 2004:
+		return true
+	default:
+		return false
+	}
+}
+
+// setXTermPrivateMode applies an xterm-only private mode and reports whether
+// the mode is supported.
+func (t *Terminal) setXTermPrivateMode(mode int, enabled bool) bool {
+	switch mode {
+	case 47, 1047:
+		if enabled {
+			t.enterAlternate(mode == 1047)
+		} else {
+			t.exitAlternate()
+		}
+	case 1049:
+		if enabled {
+			t.main.savedCursor = t.main.cursor
+			t.enterAlternate(true)
+		} else {
+			t.exitAlternate()
+			visible := t.main.cursor.Visible
+			t.main.cursor = t.main.savedCursor
+			t.main.cursor.Visible = visible
+		}
+	default:
+		return false
+	}
+	return true
 }
 
 func (t *Terminal) enterAlternate(clear bool) {
@@ -898,12 +1019,32 @@ func (t *Terminal) setRendition(parameters []parsing.Parameter) {
 			t.style.Foreground = tuicast.Color(value - 90 + 8)
 		case t.xterm && value >= 100 && value <= 107:
 			t.style.Background = tuicast.Color(value - 100 + 8)
+		default:
+			t.unsupported(fmt.Sprintf("CSI %d m", value))
 		}
 	}
 }
 
 func (t *Terminal) setExtendedColor(parameters []parsing.Parameter, index int, foreground bool) int {
-	if !t.xterm || index+2 >= len(parameters) || parameters[index+1].Value != 5 || !parameters[index+2].Present {
+	selector := parameters[index].Value
+	if !t.xterm {
+		t.unsupported(fmt.Sprintf("CSI %d m", selector))
+		return index
+	}
+	if index+1 < len(parameters) && parameters[index+1].Value == 2 {
+		// Consume the red, green, and blue components so they are not misread
+		// as attributes such as bold or underline.
+		t.unsupported(fmt.Sprintf("CSI %d;2 m", selector))
+		if parameters[index].More {
+			// The colon form, 38:2:<space>:r:g:b, is one subparameter group.
+			for index < len(parameters)-1 && parameters[index].More {
+				index++
+			}
+			return index
+		}
+		return min(index+4, len(parameters)-1)
+	}
+	if index+2 >= len(parameters) || parameters[index+1].Value != 5 || !parameters[index+2].Present {
 		return index
 	}
 	color := parameters[index+2].Value

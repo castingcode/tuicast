@@ -14,6 +14,10 @@ import (
 	"github.com/castingcode/tuicast"
 )
 
+// replayedEvents bounds the retained events sent when an event subscription
+// starts. It matches the 64-event subscription buffer each SDK uses.
+const replayedEvents = 64
+
 // ConnectorFactory creates concrete transport connectors at the driver
 // composition boundary.
 type ConnectorFactory func(ConnectionOptions) (tuicast.Connector, error)
@@ -275,6 +279,10 @@ func (s *Server) call(method string, params json.RawMessage, writer *rpcWriter) 
 		return s.wait(params)
 	case "session.waitForIdle":
 		return s.waitForIdle(params)
+	case "session.state":
+		return s.sessionState(params)
+	case "session.waitForEnd":
+		return s.waitForEnd(params)
 	case "session.subscribe":
 		return s.subscribe(params, writer)
 	case "session.subscribeEvents":
@@ -621,6 +629,53 @@ func (s *Server) waitForIdle(data json.RawMessage) (any, *responseError) {
 	return makeScreenResult(screen), nil
 }
 
+func (s *Server) sessionState(data json.RawMessage) (any, *responseError) {
+	var params struct {
+		SessionID uint64 `json:"sessionId"`
+	}
+	if err := decodeParams(data, &params); err != nil {
+		return nil, err
+	}
+	session, responseErr := s.getSession(params.SessionID)
+	if responseErr != nil {
+		return nil, responseErr
+	}
+	return makeSessionStateResult(session), nil
+}
+
+func (s *Server) waitForEnd(data json.RawMessage) (any, *responseError) {
+	var params struct {
+		SessionID           uint64 `json:"sessionId"`
+		TimeoutMilliseconds int64  `json:"timeoutMilliseconds"`
+	}
+	if err := decodeParams(data, &params); err != nil {
+		return nil, err
+	}
+	if params.TimeoutMilliseconds <= 0 {
+		return nil, invalidParams("timeoutMilliseconds must be positive")
+	}
+	session, responseErr := s.getSession(params.SessionID)
+	if responseErr != nil {
+		return nil, responseErr
+	}
+	timeout, err := milliseconds(params.TimeoutMilliseconds, false)
+	if err != nil {
+		return nil, invalidParams("invalid timeoutMilliseconds: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(s.context, timeout)
+	defer cancel()
+	select {
+	case <-session.Done():
+		return makeSessionStateResult(session), nil
+	case <-ctx.Done():
+		return nil, applicationError(&tuicast.WaitError{
+			Expected:   "session end",
+			LastScreen: session.Screen(),
+			Cause:      ctx.Err(),
+		})
+	}
+}
+
 func (s *Server) subscribe(data json.RawMessage, writer *rpcWriter) (any, *responseError) {
 	var params struct {
 		SessionID uint64 `json:"sessionId"`
@@ -685,7 +740,13 @@ func (s *Server) subscribeEvents(data json.RawMessage, writer *rpcWriter) (any, 
 	id := s.nextSubscription
 	s.subscriptions[id] = subscriptionRecord{sessionID: params.SessionID, cancel: cancel, start: start}
 	s.mu.Unlock()
+	// Subscribe before reading the history so no event falls between them;
+	// events in both are skipped by sequence below.
 	events := session.Events(ctx)
+	replay := session.EventsAfter(0)
+	if len(replay) > replayedEvents {
+		replay = replay[len(replay)-replayedEvents:]
+	}
 
 	go func() {
 		select {
@@ -693,7 +754,7 @@ func (s *Server) subscribeEvents(data json.RawMessage, writer *rpcWriter) (any, 
 		case <-ctx.Done():
 			return
 		}
-		for event := range events {
+		write := func(event tuicast.TerminalEvent) bool {
 			if err := writer.write(notification{
 				JSONRPC: "2.0",
 				Method:  "session.event",
@@ -708,7 +769,24 @@ func (s *Server) subscribeEvents(data json.RawMessage, writer *rpcWriter) (any, 
 				},
 			}); err != nil {
 				cancel()
+				return false
+			}
+			return true
+		}
+		var last uint64
+		written := true
+		for _, event := range replay {
+			if written = write(event); !written {
 				break
+			}
+			last = event.Sequence
+		}
+		for event := range events {
+			if !written {
+				break
+			}
+			if event.Sequence > last {
+				written = write(event)
 			}
 		}
 		s.mu.Lock()
@@ -821,5 +899,6 @@ func makeScreenResult(screen tuicast.Screen) screenResult {
 		},
 		Revision: screen.Revision,
 		Text:     screen.Text(),
+		Title:    screen.Title,
 	}
 }

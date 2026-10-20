@@ -77,6 +77,7 @@ func TestDriverHelperProcess(t *testing.T) {
 			} else {
 				_ = write(map[string]any{"jsonrpc": "2.0", "method": "session.event", "params": map[string]any{"subscriptionId": 33, "sessionId": 22, "event": map[string]any{"sequence": 6, "type": "bell"}}})
 				_ = write(map[string]any{"jsonrpc": "2.0", "method": "session.event", "params": map[string]any{"subscriptionId": 33, "sessionId": 22, "event": map[string]any{"sequence": 7, "type": "enquiry", "data": "TUICAST"}}})
+				_ = write(map[string]any{"jsonrpc": "2.0", "method": "session.event", "params": map[string]any{"subscriptionId": 33, "sessionId": 22, "event": map[string]any{"sequence": 8, "type": "unsupported", "data": "CSI ? 2004 h"}}})
 			}
 			continue
 		case "session.unsubscribe":
@@ -107,6 +108,19 @@ func TestDriverHelperProcess(t *testing.T) {
 				}
 			}
 			response["result"] = helperScreen()
+		case "session.state":
+			response["result"] = map[string]any{"state": "active"}
+		case "session.waitForEnd":
+			var params struct {
+				SessionID           uint64 `json:"sessionId"`
+				TimeoutMilliseconds int64  `json:"timeoutMilliseconds"`
+			}
+			_ = json.Unmarshal(request.Params, &params)
+			if params.SessionID != 22 || params.TimeoutMilliseconds != 250 {
+				response["error"] = map[string]any{"code": -32602, "message": "unexpected waitForEnd parameters"}
+			} else {
+				response["result"] = map[string]any{"state": "ended", "error": "reading terminal output: connection reset"}
+			}
 		default:
 			response["error"] = map[string]any{"code": -32601, "message": "method not found"}
 		}
@@ -155,11 +169,13 @@ func TestClientLifecycle(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(<-events.Events, ShouldResemble, TerminalEvent{Sequence: 6, Type: EventBell})
 		So(<-events.Events, ShouldResemble, TerminalEvent{Sequence: 7, Type: EventEnquiry, Data: "TUICAST"})
+		So(<-events.Events, ShouldResemble, TerminalEvent{Sequence: 8, Type: EventUnsupported, Data: "CSI ? 2004 h"})
 		So(events.Close(context.Background()), ShouldBeNil)
 
 		screen, err := session.Screen(context.Background())
 		So(err, ShouldBeNil)
 		So(screen.Contains("READY"), ShouldBeTrue)
+		So(screen.Title, ShouldEqual, "RF-01")
 		var waitGroup sync.WaitGroup
 		concurrentErrors := make(chan error, 10)
 		for range 10 {
@@ -194,6 +210,15 @@ func TestClientLifecycle(t *testing.T) {
 		So(errors.As(err, &waitErr), ShouldBeTrue)
 		So(waitErr.LastScreen.Text(), ShouldEqual, "READY")
 
+		state, err := session.State(context.Background())
+		So(err, ShouldBeNil)
+		So(state, ShouldResemble, SessionState{})
+		state, err = session.WaitForEnd(context.Background(), WaitTimeout(250*time.Millisecond))
+		So(err, ShouldBeNil)
+		So(state, ShouldResemble, SessionState{Ended: true, Error: "reading terminal output: connection reset"})
+		_, err = session.WaitForEnd(context.Background(), StableFor(time.Millisecond))
+		So(err, ShouldNotBeNil)
+
 		So(session.Close(context.Background()), ShouldBeNil)
 		So(session.Close(context.Background()), ShouldBeNil)
 		So(connection.Close(context.Background()), ShouldBeNil)
@@ -224,7 +249,7 @@ func helperScreen() map[string]any {
 		}
 	}
 	return map[string]any{
-		"width": 5, "height": 1, "revision": 3, "text": "READY", "cells": cells,
+		"width": 5, "height": 1, "revision": 3, "text": "READY", "title": "RF-01", "cells": cells,
 		"cursor": map[string]any{"column": 0, "row": 0, "visible": true},
 	}
 }

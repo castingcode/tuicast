@@ -11,6 +11,7 @@ import type {
   OperationOptions,
   ScreenData,
   SessionOptions,
+  SessionState,
   TerminalEvent,
   WaitOptions,
 } from "./types.js";
@@ -411,6 +412,26 @@ export class Session {
       ),
     );
   }
+  /** Reports whether the session is active or has ended, without waiting. */
+  async state(o: OperationOptions = {}): Promise<SessionState> {
+    return sessionState(
+      await this.driver.call("session.state", { sessionId: this.id }, o),
+    );
+  }
+  /**
+   * Waits until the host ends the session, such as after a sign-out. A timeout
+   * rejects with a `WaitError` carrying the last screen.
+   */
+  async waitForEnd(o: OperationOptions = {}): Promise<SessionState> {
+    const timeout = o.timeout ?? this.driver.defaultTimeout;
+    return sessionState(
+      await this.driver.call(
+        "session.waitForEnd",
+        { sessionId: this.id, timeoutMilliseconds: timeout },
+        { signal: o.signal, timeout: timeout + 1000 },
+      ),
+    );
+  }
   async subscribe(o: OperationOptions = {}): Promise<ScreenSubscription> {
     const r = await this.driver.call(
       "session.subscribe",
@@ -436,6 +457,14 @@ export class Session {
       .call("session.close", { sessionId: this.id }, o)
       .then(() => {}));
   }
+}
+
+function sessionState(r: { state: string; error?: string }): SessionState {
+  return Object.freeze(
+    r.error
+      ? { ended: r.state === "ended", error: r.error }
+      : { ended: r.state === "ended" },
+  );
 }
 
 function validateConnection(c: ConnectionConfig) {

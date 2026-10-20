@@ -1,5 +1,6 @@
 package dev.castingcode.tuicast;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.*;
 import java.util.Base64;
@@ -116,6 +117,36 @@ public final class Session implements AutoCloseable {
             TelnetConfig.millis(quiet)),
         Screen.class,
         timeout.plusSeconds(1));
+  }
+
+  /** Reports whether the session is active or has ended, without waiting. */
+  public SessionState state() {
+    return sessionState(
+        call("session.state", Map.of("sessionId", id), JsonNode.class, driver.defaultTimeout()));
+  }
+
+  /**
+   * Waits until the host ends the session, such as after a sign-out. A timeout throws a {@link
+   * WaitException} carrying the last screen.
+   */
+  public SessionState waitForEnd() {
+    return waitForEnd(driver.defaultTimeout());
+  }
+
+  public SessionState waitForEnd(Duration timeout) {
+    return sessionState(
+        call(
+            "session.waitForEnd",
+            Map.of("sessionId", id, "timeoutMilliseconds", TelnetConfig.millis(timeout)),
+            JsonNode.class,
+            timeout.plusSeconds(1)));
+  }
+
+  private static SessionState sessionState(JsonNode result) {
+    var error = result.path("error").asText();
+    return new SessionState(
+        "ended".equals(result.path("state").asText()),
+        error.isEmpty() ? Optional.empty() : Optional.of(error));
   }
 
   public Subscription<Screen> subscribe() {

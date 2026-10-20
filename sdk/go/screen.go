@@ -64,6 +64,9 @@ type Screen struct {
 	Cursor   Cursor `json:"cursor"`
 	Revision uint64 `json:"revision"`
 	Content  string `json:"text"`
+	// Title is the window title most recently set by the host. It is empty
+	// when the host has not set one or the terminal profile has no titles.
+	Title string `json:"title"`
 }
 
 // Text returns the complete screen text, preserving rows and trailing spaces.

@@ -47,6 +47,8 @@ func TestOpenRPCDocument(t *testing.T) {
 			"session.screen",
 			"session.wait",
 			"session.waitForIdle",
+			"session.state",
+			"session.waitForEnd",
 			"session.subscribe",
 			"session.subscribeEvents",
 			"session.unsubscribe",

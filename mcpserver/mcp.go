@@ -41,7 +41,7 @@ func NewMCPServer(service *Service, version string) (*mcp.Server, error) {
 		return nil, result, err
 	})
 	mcp.AddTool(server, &mcp.Tool{
-		Name: "tuicast_screen", Description: "Read the current text, dimensions, cursor, and revision of a terminal session screen.", Annotations: readOnly,
+		Name: "tuicast_screen", Description: "Read the current text, dimensions, cursor, revision, and host-set window title of a terminal session screen, and whether the session is active or has ended. An ended session's final screen remains readable until it is closed.", Annotations: readOnly,
 	}, func(_ context.Context, _ *mcp.CallToolRequest, input sessionInput) (*mcp.CallToolResult, ScreenInfo, error) {
 		result, err := service.Screen(input.SessionID)
 		return nil, result, err
@@ -91,6 +91,25 @@ func NewMCPServer(service *Service, version string) (*mcp.Server, error) {
 		return nil, result, err
 	})
 	mcp.AddTool(server, &mcp.Tool{
+		Name: "tuicast_wait_for_end", Description: "Wait until the host ends a terminal session, such as after signing out, then return its final screen. sessionError is set only when a transport or terminal failure ended the session. Screen results from other tools also report sessionState.", Annotations: readOnly,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input waitForEndInput) (*mcp.CallToolResult, ScreenInfo, error) {
+		timeout, err := boundedMilliseconds("timeoutMilliseconds", input.TimeoutMilliseconds)
+		if err != nil {
+			return nil, ScreenInfo{}, err
+		}
+		result, err := service.WaitForEnd(ctx, input.SessionID, timeout)
+		return nil, result, err
+	})
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "tuicast_events",
+		Description: "Read a terminal session's events: bell (the host rang the terminal bell, which RF and warehouse applications often use to signal an error), enquiry (the host requested the answerback), and unsupported (a control sequence TUICast ignored, reported once per sequence; check these when the screen looks wrong). " +
+			"Pass the largest sequence you have seen as afterSequence to read only newer events. missed counts events in that range that are no longer retained. Up to 256 recent events are kept until the session is closed.",
+		Annotations: readOnly,
+	}, func(_ context.Context, _ *mcp.CallToolRequest, input eventsInput) (*mcp.CallToolResult, EventsInfo, error) {
+		result, err := service.Events(input.SessionID, input.AfterSequence)
+		return nil, result, err
+	})
+	mcp.AddTool(server, &mcp.Tool{
 		Name: "tuicast_type", Description: "Type literal text into an interactive terminal session. The text is sent exactly and is not logged by TUICast. While recording, set parameter for passwords and other secrets so the recording stores the parameter name instead of the text.", Annotations: changesTerminal,
 	}, func(_ context.Context, _ *mcp.CallToolRequest, input typeInput) (*mcp.CallToolResult, actionOutput, error) {
 		err := service.Type(input.SessionID, input.Text, input.Parameter)
@@ -109,7 +128,7 @@ func NewMCPServer(service *Service, version string) (*mcp.Server, error) {
 	// cannot infer a schema for; schema/workbench-recording.schema.json
 	// documents their format.
 	mcp.AddTool(server, &mcp.Tool{
-		Name: "tuicast_start_recording", Description: "Start recording a session's successful type, press, and wait operations as a replayable TUICast workflow. Screen reads and failed operations are not recorded. Use this once you know the path you want to capture, then repeat it from a known screen.", Annotations: recordingControl,
+		Name: "tuicast_start_recording", Description: "Start recording a session's successful type, press, and wait operations, including waiting for the session to end, as a replayable TUICast workflow. Screen reads and failed operations are not recorded. Use this once you know the path you want to capture, then repeat it from a known screen.", Annotations: recordingControl,
 	}, func(_ context.Context, _ *mcp.CallToolRequest, input sessionInput) (*mcp.CallToolResult, any, error) {
 		result, err := service.StartRecording(input.SessionID)
 		return nil, result, err
@@ -201,6 +220,16 @@ type waitForIdleInput struct {
 	SessionID           uint64 `json:"sessionId" jsonschema:"TUICast session identifier"`
 	QuietMilliseconds   int    `json:"quietMilliseconds" jsonschema:"required period without host output, in milliseconds; cannot exceed 120000"`
 	TimeoutMilliseconds int    `json:"timeoutMilliseconds,omitempty" jsonschema:"timeout in milliseconds; defaults to 10000 and cannot exceed 120000"`
+}
+
+type waitForEndInput struct {
+	SessionID           uint64 `json:"sessionId" jsonschema:"TUICast session identifier"`
+	TimeoutMilliseconds int    `json:"timeoutMilliseconds,omitempty" jsonschema:"timeout in milliseconds; defaults to 10000 and cannot exceed 120000"`
+}
+
+type eventsInput struct {
+	SessionID     uint64 `json:"sessionId" jsonschema:"TUICast session identifier"`
+	AfterSequence uint64 `json:"afterSequence,omitempty" jsonschema:"return only events with a larger sequence number; defaults to 0 for all retained events"`
 }
 
 type typeInput struct {

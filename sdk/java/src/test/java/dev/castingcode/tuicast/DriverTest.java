@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +37,7 @@ class DriverTest {
       session.press('c', Modifier.Control);
       session.resize(132, 24);
       assertEquals("READY", session.screen().text());
+      assertEquals("RF-01", session.screen().title());
       assertTrue(session.waitForText("READY").contains("READY"));
       assertTrue(session.waitForTextGone("LOADING").contains("READY"));
       assertEquals(3, session.waitForIdle().revision());
@@ -47,6 +49,10 @@ class DriverTest {
       assertEquals("READY", failure.lastScreen().text());
       assertEquals(-32000, failure.code());
       assertNotNull(failure.data());
+      assertEquals(new SessionState(false, Optional.empty()), session.state());
+      assertEquals(
+          new SessionState(true, Optional.of("reading terminal output: reset")),
+          session.waitForEnd(Duration.ofMillis(250)));
       session.close();
       session.close();
       connection.close();
@@ -79,6 +85,9 @@ class DriverTest {
       try (var events = session.subscribeEvents()) {
         assertEquals("bell", events.take(Duration.ofSeconds(1)).type());
         assertEquals("enquiry", events.take(Duration.ofSeconds(1)).type());
+        assertEquals(
+            new TerminalEvent(3, "unsupported", "CSI ? 2004 h"),
+            events.take(Duration.ofSeconds(1)));
         events.close();
         events.close();
       }

@@ -1,6 +1,7 @@
 package tuicast_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -207,6 +208,43 @@ func TestSessionAutomation(t *testing.T) {
 		So(bell, ShouldResemble, tuicast.TerminalEvent{Sequence: 1, Type: tuicast.EventBell})
 		So(enquiry, ShouldResemble, tuicast.TerminalEvent{Sequence: 2, Type: tuicast.EventEnquiry, Data: "TUICAST"})
 		So(<-answerback, ShouldEqual, "TUICAST")
+		So(server.Close(), ShouldBeNil)
+	})
+
+	Convey("Unsupported sequences are observable and logged once", t, func() {
+		start := make(chan struct{})
+		connector, err := memory.NewConnector(func(ctx context.Context, remote io.ReadWriteCloser) {
+			select {
+			case <-start:
+			case <-ctx.Done():
+				return
+			}
+			_, _ = remote.Write([]byte("\x1b[?1234h\x1b[?1234h\a"))
+			<-ctx.Done()
+		})
+		So(err, ShouldBeNil)
+		var logs bytes.Buffer
+		server, err := tuicast.NewServer(slog.New(slog.NewTextHandler(&logs, nil)))
+		So(err, ShouldBeNil)
+		connection, err := server.Connect(context.Background(), connector)
+		So(err, ShouldBeNil)
+		session, err := connection.NewSession(context.Background(), newTestTerminal(10, 2))
+		So(err, ShouldBeNil)
+		events := session.Events(context.Background())
+		close(start)
+
+		So(<-events, ShouldResemble, tuicast.TerminalEvent{Sequence: 1, Type: tuicast.EventUnsupported, Data: "CSI ? 1234 h"})
+		So(<-events, ShouldResemble, tuicast.TerminalEvent{Sequence: 2, Type: tuicast.EventBell})
+		So(session.EventsAfter(0), ShouldResemble, []tuicast.TerminalEvent{
+			{Sequence: 1, Type: tuicast.EventUnsupported, Data: "CSI ? 1234 h"},
+			{Sequence: 2, Type: tuicast.EventBell},
+		})
+		So(session.EventsAfter(1), ShouldResemble, []tuicast.TerminalEvent{{Sequence: 2, Type: tuicast.EventBell}})
+		So(session.EventsAfter(2), ShouldBeEmpty)
+		So(strings.Count(logs.String(), "ignored unsupported terminal sequence"), ShouldEqual, 1)
+		So(logs.String(), ShouldContainSubstring, `level=WARN`)
+		So(logs.String(), ShouldContainSubstring, `sequence="CSI ? 1234 h"`)
+		So(logs.String(), ShouldContainSubstring, fmt.Sprintf("session_id=%d", session.ID()))
 		So(server.Close(), ShouldBeNil)
 	})
 

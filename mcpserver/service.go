@@ -61,14 +61,20 @@ type SessionInfo struct {
 	Height       int    `json:"height"`
 }
 
-// ScreenInfo is a detached text representation of a terminal screen.
+// ScreenInfo is a detached text representation of a terminal screen. Title
+// is the window title set by the host, if any. SessionState is "active" or
+// "ended"; SessionError is set only when a transport or terminal failure
+// ended the session.
 type ScreenInfo struct {
-	SessionID uint64     `json:"sessionId"`
-	Text      string     `json:"text"`
-	Width     int        `json:"width"`
-	Height    int        `json:"height"`
-	Cursor    CursorInfo `json:"cursor"`
-	Revision  uint64     `json:"revision"`
+	SessionID    uint64     `json:"sessionId"`
+	Text         string     `json:"text"`
+	Width        int        `json:"width"`
+	Height       int        `json:"height"`
+	Cursor       CursorInfo `json:"cursor"`
+	Revision     uint64     `json:"revision"`
+	Title        string     `json:"title,omitempty"`
+	SessionState string     `json:"sessionState"`
+	SessionError string     `json:"sessionError,omitempty"`
 }
 
 // CursorInfo is the zero-based cursor location and visibility state.
@@ -92,6 +98,23 @@ type managedConnection struct {
 type managedSession struct {
 	session *tuicast.Session
 	info    SessionInfo
+}
+
+// EventInfo is one terminal event. Type is "bell", "enquiry", or
+// "unsupported"; Data is the answerback for an enquiry and the ignored
+// sequence for an unsupported event.
+type EventInfo struct {
+	Sequence uint64 `json:"sequence"`
+	Type     string `json:"type"`
+	Data     string `json:"data,omitempty"`
+}
+
+// EventsInfo lists a session's terminal events after a sequence number.
+// Missed counts events in that range that are no longer retained.
+type EventsInfo struct {
+	SessionID uint64      `json:"sessionId"`
+	Events    []EventInfo `json:"events"`
+	Missed    uint64      `json:"missed,omitempty"`
 }
 
 // Service owns terminal connections and sessions used by one MCP server.
@@ -244,13 +267,31 @@ func (s *Service) OpenSession(ctx context.Context, connectionID uint64) (Session
 	return info, nil
 }
 
+// Events returns a session's retained terminal events with sequence numbers
+// greater than afterSequence. Events remain readable after the session ends,
+// until it is closed.
+func (s *Service) Events(sessionID, afterSequence uint64) (EventsInfo, error) {
+	session, err := s.findSession(sessionID)
+	if err != nil {
+		return EventsInfo{}, err
+	}
+	info := EventsInfo{SessionID: sessionID, Events: []EventInfo{}}
+	for _, event := range session.EventsAfter(afterSequence) {
+		info.Events = append(info.Events, EventInfo{Sequence: event.Sequence, Type: string(event.Type), Data: event.Data})
+	}
+	if len(info.Events) > 0 {
+		info.Missed = info.Events[0].Sequence - afterSequence - 1
+	}
+	return info, nil
+}
+
 // Screen returns the current detached screen for a session.
 func (s *Service) Screen(sessionID uint64) (ScreenInfo, error) {
 	session, err := s.findSession(sessionID)
 	if err != nil {
 		return ScreenInfo{}, err
 	}
-	return screenInfo(sessionID, session.Screen()), nil
+	return screenInfo(sessionID, session, session.Screen()), nil
 }
 
 // WaitForText waits until exact text appears on a session screen.
@@ -273,7 +314,7 @@ func (s *Service) WaitForText(ctx context.Context, sessionID uint64, text string
 		return ScreenInfo{}, fmt.Errorf("waiting for MCP screen text in session %d: %w", sessionID, err)
 	}
 	s.record(sessionID, workbench.Step{Action: "waitForText", Text: text, TimeoutMilliseconds: timeout.Milliseconds()})
-	return screenInfo(sessionID, screen), nil
+	return screenInfo(sessionID, session, screen), nil
 }
 
 // Wait waits until matcher succeeds on a session screen. A positive stable
@@ -309,7 +350,7 @@ func (s *Service) Wait(ctx context.Context, sessionID uint64, matcher tuicast.Ma
 		Action: "wait", Matcher: &matcher,
 		TimeoutMilliseconds: timeout.Milliseconds(), StableMilliseconds: stable.Milliseconds(),
 	})
-	return screenInfo(sessionID, screen), nil
+	return screenInfo(sessionID, session, screen), nil
 }
 
 // WaitForIdle waits until no host output arrives for quiet.
@@ -334,7 +375,31 @@ func (s *Service) WaitForIdle(ctx context.Context, sessionID uint64, quiet, time
 	s.record(sessionID, workbench.Step{
 		Action: "waitForIdle", QuietMilliseconds: quiet.Milliseconds(), TimeoutMilliseconds: timeout.Milliseconds(),
 	})
-	return screenInfo(sessionID, screen), nil
+	return screenInfo(sessionID, session, screen), nil
+}
+
+// WaitForEnd waits until the host ends a session, such as after a sign-out,
+// and returns its final screen. A timeout error includes the last screen.
+func (s *Service) WaitForEnd(ctx context.Context, sessionID uint64, timeout time.Duration) (ScreenInfo, error) {
+	timeout, err := effectiveTimeout(timeout)
+	if err != nil {
+		return ScreenInfo{}, fmt.Errorf("waiting for MCP session end: %w", err)
+	}
+	session, err := s.findSession(sessionID)
+	if err != nil {
+		return ScreenInfo{}, err
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	select {
+	case <-session.Done():
+	case <-waitCtx.Done():
+		return ScreenInfo{}, fmt.Errorf("waiting for MCP session %d to end: %w", sessionID, &tuicast.WaitError{
+			Expected: "session end", LastScreen: session.Screen(), Cause: waitCtx.Err(),
+		})
+	}
+	s.record(sessionID, workbench.Step{Action: "waitForEnd", TimeoutMilliseconds: timeout.Milliseconds()})
+	return screenInfo(sessionID, session, session.Screen()), nil
 }
 
 // Type sends literal text to a terminal session. When the session is
@@ -506,10 +571,21 @@ func effectiveTimeout(timeout time.Duration) (time.Duration, error) {
 	return timeout, nil
 }
 
-func screenInfo(sessionID uint64, screen tuicast.Screen) ScreenInfo {
-	return ScreenInfo{
+func screenInfo(sessionID uint64, session *tuicast.Session, screen tuicast.Screen) ScreenInfo {
+	info := ScreenInfo{
 		SessionID: sessionID, Text: screen.Text(), Width: screen.Width, Height: screen.Height,
-		Cursor:   CursorInfo{Column: screen.Cursor.Column, Row: screen.Cursor.Row, Visible: screen.Cursor.Visible},
-		Revision: screen.Revision,
+		Cursor:       CursorInfo{Column: screen.Cursor.Column, Row: screen.Cursor.Row, Visible: screen.Cursor.Visible},
+		Revision:     screen.Revision,
+		Title:        screen.Title,
+		SessionState: "active",
 	}
+	select {
+	case <-session.Done():
+		info.SessionState = "ended"
+		if err := session.Err(); err != nil {
+			info.SessionError = err.Error()
+		}
+	default:
+	}
+	return info
 }

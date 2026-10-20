@@ -19,6 +19,7 @@ sdk/typescript/coverage/
 sdk/typescript/dist/
 sdk/typescript/*.tgz
 target/
+examples/mcp/vscode.sh
 
 # Local environment files hold passwords and are never committed.
 .env.local

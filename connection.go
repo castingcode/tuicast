@@ -74,7 +74,7 @@ func (c *Connection) NewSession(ctx context.Context, terminal Terminal) (*Sessio
 		return nil, fmt.Errorf("opening transport session: %w", err)
 	}
 
-	session := newSession(c.server.nextSessionID(), terminal, stream, c.removeSession)
+	session := newSession(c.server.nextSessionID(), terminal, stream, c.removeSession, c.server.logger.With("connection_id", c.id))
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()

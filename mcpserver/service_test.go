@@ -1,6 +1,7 @@
 package mcpserver_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -163,6 +164,102 @@ func TestServiceWaitsAndRecordings(t *testing.T) {
 		So(err.Error(), ShouldContainSubstring, "not recording")
 	})
 
+	Convey("A host-ended session reports its state and records waitForEnd", t, func() {
+		service := newService(func(_ context.Context, remote io.ReadWriteCloser) {
+			_, _ = remote.Write([]byte("BYE"))
+			_, _ = io.ReadFull(remote, make([]byte, 1))
+			_ = remote.Close()
+		})
+		defer service.Close()
+		connection, err := service.Connect(context.Background(), "warehouse")
+		So(err, ShouldBeNil)
+		session, err := service.OpenSession(context.Background(), connection.ConnectionID)
+		So(err, ShouldBeNil)
+		screen, err := service.WaitForText(context.Background(), session.SessionID, "BYE", time.Second)
+		So(err, ShouldBeNil)
+		So(screen.SessionState, ShouldEqual, "active")
+		_, err = service.StartRecording(session.SessionID)
+		So(err, ShouldBeNil)
+
+		_, err = service.WaitForEnd(context.Background(), session.SessionID, 10*time.Millisecond)
+		So(err, ShouldNotBeNil)
+		So(err.Error(), ShouldContainSubstring, "session end")
+		So(err.Error(), ShouldContainSubstring, "last screen")
+
+		So(service.Type(session.SessionID, "q", ""), ShouldBeNil)
+		screen, err = service.WaitForEnd(context.Background(), session.SessionID, 0)
+		So(err, ShouldBeNil)
+		So(screen.SessionState, ShouldEqual, "ended")
+		So(screen.SessionError, ShouldBeEmpty)
+		So(screen.Text, ShouldStartWith, "BYE")
+		screen, err = service.Screen(session.SessionID)
+		So(err, ShouldBeNil)
+		So(screen.SessionState, ShouldEqual, "ended")
+
+		recording, err := service.StopRecording(session.SessionID)
+		So(err, ShouldBeNil)
+		So(recording.Steps, ShouldResemble, []workbench.Step{
+			{Action: "type", Text: "q"},
+			{Action: "waitForEnd", TimeoutMilliseconds: 10000},
+		})
+		encoded, err := json.Marshal(recording)
+		So(err, ShouldBeNil)
+		So(validateRecording(encoded), ShouldBeNil)
+	})
+
+	Convey("Terminal events are retained from session start and read after a sequence number", t, func() {
+		service := newService(func(ctx context.Context, remote io.ReadWriteCloser) {
+			_, _ = remote.Write([]byte("\a\x1b[?1234h\a\x1b[?1234hDONE"))
+			<-ctx.Done()
+		})
+		defer service.Close()
+		connection, err := service.Connect(context.Background(), "warehouse")
+		So(err, ShouldBeNil)
+		session, err := service.OpenSession(context.Background(), connection.ConnectionID)
+		So(err, ShouldBeNil)
+
+		events := waitForEvent(service, session.SessionID, 3)
+		So(events.Events, ShouldResemble, []mcpserver.EventInfo{
+			{Sequence: 1, Type: "bell"},
+			{Sequence: 2, Type: "unsupported", Data: "CSI ? 1234 h"},
+			{Sequence: 3, Type: "bell"},
+		})
+		So(events.Missed, ShouldEqual, 0)
+		events, err = service.Events(session.SessionID, 1)
+		So(err, ShouldBeNil)
+		So(events.Events, ShouldHaveLength, 2)
+		So(events.Events[0].Sequence, ShouldEqual, 2)
+		events, err = service.Events(session.SessionID, 3)
+		So(err, ShouldBeNil)
+		So(events, ShouldResemble, mcpserver.EventsInfo{SessionID: session.SessionID, Events: []mcpserver.EventInfo{}})
+
+		_, err = service.CloseSession(session.SessionID)
+		So(err, ShouldBeNil)
+		_, err = service.Events(session.SessionID, 0)
+		So(err.Error(), ShouldContainSubstring, "unknown session")
+	})
+
+	Convey("A burst keeps the most recent 256 events and counts the rest as missed", t, func() {
+		service := newService(func(ctx context.Context, remote io.ReadWriteCloser) {
+			_, _ = remote.Write(bytes.Repeat([]byte{'\a'}, 300))
+			<-ctx.Done()
+		})
+		defer service.Close()
+		connection, err := service.Connect(context.Background(), "warehouse")
+		So(err, ShouldBeNil)
+		session, err := service.OpenSession(context.Background(), connection.ConnectionID)
+		So(err, ShouldBeNil)
+
+		events := waitForEvent(service, session.SessionID, 300)
+		So(events.Events, ShouldHaveLength, 256)
+		So(events.Events[0].Sequence, ShouldEqual, 45)
+		So(events.Missed, ShouldEqual, 44)
+		events, err = service.Events(session.SessionID, 290)
+		So(err, ShouldBeNil)
+		So(events.Events, ShouldHaveLength, 10)
+		So(events.Missed, ShouldEqual, 0)
+	})
+
 	Convey("Closing a session discards its active recording", t, func() {
 		service := newService(func(context.Context, io.ReadWriteCloser) {})
 		defer service.Close()
@@ -190,6 +287,20 @@ func TestServiceWaitsAndRecordings(t *testing.T) {
 		_, err = service.WaitForIdle(context.Background(), 1, time.Millisecond, 3*time.Minute)
 		So(err.Error(), ShouldContainSubstring, "timeout must be")
 	})
+}
+
+// waitForEvent polls until a session has retained the event with sequence.
+func waitForEvent(service *mcpserver.Service, sessionID, sequence uint64) mcpserver.EventsInfo {
+	deadline := time.Now().Add(time.Second)
+	for {
+		events, err := service.Events(sessionID, 0)
+		So(err, ShouldBeNil)
+		retained := len(events.Events) > 0 && events.Events[len(events.Events)-1].Sequence >= sequence
+		if retained || time.Now().After(deadline) {
+			return events
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 // validateRecording checks encoded against the published recording schema.

@@ -29,19 +29,23 @@ def test_lifecycle_concurrency_waits_and_subscriptions(driver):
         assert all(
             screen.text == "READY" for screen in pool.map(lambda _: session.screen(), range(16))
         )
-    assert session.wait_for_text("READY", stable_for=0.01).contains("READY")
+    assert session.wait_for_text("READY", stable_for=0.01).title == "RF-01"
     assert session.wait_for_text_gone("LOADING").text == "READY"
     assert session.wait_for_idle(quiet_for=0.01).text == "READY"
     with pytest.raises(tuicast.WaitError) as caught:
         session.wait_for_text("MISSING")
     assert tuicast.is_timeout(caught.value) and caught.value.last_screen.text == "READY"
+    assert session.state() == tuicast.SessionState(ended=False)
+    assert session.wait_for_end(timeout=0.25) == tuicast.SessionState(
+        ended=True, error="reading terminal output: reset"
+    )
     screens = session.subscribe()
     time.sleep(0.05)
     assert screens.get(timeout=1).revision == 3
     screens.close()
     screens.close()
     events = session.subscribe_events()
-    assert [events.get(timeout=1).type, events.get(timeout=1).type] == ["bell", "enquiry"]
+    assert [events.get(timeout=1).type for _ in range(3)] == ["bell", "enquiry", "unsupported"]
     events.close()
     session.close()
     session.close()

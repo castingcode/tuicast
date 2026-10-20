@@ -197,6 +197,32 @@
       "errors": [{ "$ref": "#/components/errors/ApplicationError" }]
     },
     {
+      "name": "session.state",
+      "summary": "Report whether a session is active or has ended",
+      "description": "An ended session remains registered until session.close or connection.close, so its final screen can still be read.",
+      "paramStructure": "by-name",
+      "params": [{ "$ref": "#/components/contentDescriptors/sessionId" }],
+      "result": {
+        "name": "state",
+        "schema": { "$ref": "#/components/schemas/SessionState" }
+      }
+    },
+    {
+      "name": "session.waitForEnd",
+      "summary": "Wait until the host ends a session",
+      "description": "Returns the ended session state. A timeout returns an application error whose data has kind, expected (\"session end\"), and the last screen, like session.wait.",
+      "paramStructure": "by-name",
+      "params": [
+        { "$ref": "#/components/contentDescriptors/sessionId" },
+        { "$ref": "#/components/contentDescriptors/timeoutMilliseconds" }
+      ],
+      "result": {
+        "name": "state",
+        "schema": { "$ref": "#/components/schemas/SessionState" }
+      },
+      "errors": [{ "$ref": "#/components/errors/ApplicationError" }]
+    },
+    {
       "name": "session.subscribe",
       "summary": "Subscribe to coalesced screen revisions",
       "description": "After returning the subscription ID, the driver emits session.screen notifications beginning with the current snapshot.",
@@ -209,8 +235,8 @@
     },
     {
       "name": "session.subscribeEvents",
-      "summary": "Subscribe to terminal BELL and ENQ events",
-      "description": "After returning the subscription ID, the driver emits session.event notifications.",
+      "summary": "Subscribe to terminal BELL, ENQ, and unsupported-sequence events",
+      "description": "After returning the subscription ID, the driver emits session.event notifications for up to the 64 most recent events the session retains, then for live events, without gaps or duplicates.",
       "paramStructure": "by-name",
       "params": [{ "$ref": "#/components/contentDescriptors/sessionId" }],
       "result": {
@@ -409,6 +435,18 @@
         "required": ["closed"],
         "properties": { "closed": { "type": "boolean", "const": true } }
       },
+      "SessionState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["state"],
+        "properties": {
+          "state": { "type": "string", "enum": ["active", "ended"] },
+          "error": {
+            "type": "string",
+            "description": "The transport or terminal failure that ended the session. Absent while active and when the host closed the session normally."
+          }
+        }
+      },
       "SendResult": {
         "type": "object",
         "additionalProperties": false,
@@ -540,7 +578,11 @@
           },
           "cursor": { "$ref": "#/components/schemas/Cursor" },
           "revision": { "type": "integer", "minimum": 0, "format": "uint64" },
-          "text": { "type": "string" }
+          "text": { "type": "string" },
+          "title": {
+            "type": "string",
+            "description": "Window title most recently set by the host with OSC 0 or 2. Absent when unset or unsupported by the terminal profile."
+          }
         }
       },
       "Cell": {
@@ -582,8 +624,11 @@
         "required": ["sequence", "type"],
         "properties": {
           "sequence": { "type": "integer", "minimum": 1, "format": "uint64" },
-          "type": { "type": "string", "enum": ["bell", "enquiry"] },
-          "data": { "type": "string", "description": "Configured answerback for enquiry events." }
+          "type": { "type": "string", "enum": ["bell", "enquiry", "unsupported"] },
+          "data": {
+            "type": "string",
+            "description": "Configured answerback for enquiry events; the ignored sequence, such as \"CSI ? 2004 h\", for unsupported events."
+          }
         }
       },
       "EventNotificationParams": {

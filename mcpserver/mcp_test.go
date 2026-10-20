@@ -34,7 +34,7 @@ func TestMCPProtocol(t *testing.T) {
 
 		tools, err := clientSession.ListTools(context.Background(), nil)
 		So(err, ShouldBeNil)
-		So(tools.Tools, ShouldHaveLength, 13)
+		So(tools.Tools, ShouldHaveLength, 15)
 		names := make([]string, 0, len(tools.Tools))
 		for _, tool := range tools.Tools {
 			names = append(names, tool.Name)
@@ -44,6 +44,8 @@ func TestMCPProtocol(t *testing.T) {
 		So(names, ShouldContain, "tuicast_wait_for_text")
 		So(names, ShouldContain, "tuicast_wait")
 		So(names, ShouldContain, "tuicast_wait_for_idle")
+		So(names, ShouldContain, "tuicast_wait_for_end")
+		So(names, ShouldContain, "tuicast_events")
 		So(names, ShouldContain, "tuicast_start_recording")
 		So(names, ShouldContain, "tuicast_stop_recording")
 		So(names, ShouldContain, "tuicast_close_connection")
@@ -93,6 +95,23 @@ func TestMCPProtocol(t *testing.T) {
 		var screen mcpserver.ScreenInfo
 		decodeStructured(result, &screen)
 		So(screen.Text, ShouldStartWith, "MCP READY")
+		So(screen.SessionState, ShouldEqual, "active")
+
+		result, err = clientSession.CallTool(context.Background(), &mcp.CallToolParams{
+			Name: "tuicast_wait_for_end", Arguments: map[string]any{"sessionId": session.SessionID, "timeoutMilliseconds": 10},
+		})
+		So(err, ShouldBeNil)
+		So(result.IsError, ShouldBeTrue)
+		So(result.Content[0].(*mcp.TextContent).Text, ShouldContainSubstring, "session end")
+
+		result, err = clientSession.CallTool(context.Background(), &mcp.CallToolParams{
+			Name: "tuicast_events", Arguments: map[string]any{"sessionId": session.SessionID, "afterSequence": 0},
+		})
+		So(err, ShouldBeNil)
+		So(result.IsError, ShouldBeFalse)
+		var events mcpserver.EventsInfo
+		decodeStructured(result, &events)
+		So(events, ShouldResemble, mcpserver.EventsInfo{SessionID: session.SessionID, Events: []mcpserver.EventInfo{}})
 
 		result, err = clientSession.CallTool(context.Background(), &mcp.CallToolParams{
 			Name: "tuicast_start_recording", Arguments: map[string]any{"sessionId": session.SessionID},

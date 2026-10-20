@@ -59,11 +59,11 @@ func TestTerminalEventSubscription(t *testing.T) {
 		So(session.Press(ctx, tuicast.Key("b")), ShouldBeNil)
 		bell, received := receiveEvent(events.Events)
 		So(received, ShouldBeTrue)
-		So(bell, ShouldResemble, tuicast.TerminalEvent{Sequence: 1, Type: tuicast.EventBell})
+		So(bell.Type, ShouldEqual, tuicast.EventBell)
 		So(session.Press(ctx, tuicast.Key("e")), ShouldBeNil)
 		enquiry, received := receiveEvent(events.Events)
 		So(received, ShouldBeTrue)
-		So(enquiry, ShouldResemble, tuicast.TerminalEvent{Sequence: 2, Type: tuicast.EventEnquiry, Data: "TUICAST-ANSWER"})
+		So(enquiry, ShouldResemble, tuicast.TerminalEvent{Sequence: bell.Sequence + 1, Type: tuicast.EventEnquiry, Data: "TUICAST-ANSWER"})
 
 		screen, err := session.WaitForText(ctx, `Answerback: "TUICAST-ANSWER"`)
 		So(err, ShouldBeNil)
@@ -72,11 +72,18 @@ func TestTerminalEventSubscription(t *testing.T) {
 	})
 }
 
+// receiveEvent returns the next BELL or ENQ event, skipping reports of
+// sequences the terminal ignored, such as the reference app's startup queries.
 func receiveEvent(events <-chan tuicast.TerminalEvent) (tuicast.TerminalEvent, bool) {
-	select {
-	case event, open := <-events:
-		return event, open
-	case <-time.After(time.Second):
-		return tuicast.TerminalEvent{}, false
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case event, open := <-events:
+			if !open || event.Type != tuicast.EventUnsupported {
+				return event, open
+			}
+		case <-deadline:
+			return tuicast.TerminalEvent{}, false
+		}
 	}
 }

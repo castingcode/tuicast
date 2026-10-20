@@ -1,6 +1,7 @@
 package xterm_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/castingcode/tuicast"
@@ -120,6 +121,72 @@ func TestTerminal(t *testing.T) {
 		So(before.Line(0), ShouldEqual, "A   ")
 		So(terminal.Snapshot().Line(0), ShouldEqual, "AB  ")
 	})
+
+	Convey("OSC 0 and 2 set the window title without printing it", t, func() {
+		terminal := newTerminal(8, 1)
+
+		write(terminal, "A\x1b]0;RF-01 MENU\x07B")
+		screen := terminal.Snapshot()
+		So(screen.Title, ShouldEqual, "RF-01 MENU")
+		So(screen.Line(0), ShouldEqual, "AB      ")
+		So(terminal.DrainEvents(), ShouldBeEmpty)
+
+		revision := screen.Revision
+		write(terminal, "\x1b]2;RF-01 MENU\x1b\\")
+		So(terminal.Snapshot().Revision, ShouldEqual, revision)
+		write(terminal, "\x1b]2;PICK\x1b\\\x1b]1;icon\x07")
+		So(terminal.Snapshot().Title, ShouldEqual, "PICK")
+		So(terminal.Snapshot().Revision, ShouldEqual, revision+1)
+		So(terminal.DrainEvents(), ShouldBeEmpty)
+	})
+
+	Convey("Ignored sequences are reported once each", t, func() {
+		terminal := newTerminal(8, 2)
+
+		write(terminal, "\x1b[?2004h\x1b[?1000h\x1b=\x1b[?1234h\x1b[?1234h\x1b[6n\x1b[>c\x1b[3m")
+		write(terminal, "\x1b]52;c;c2VjcmV0\x07\x1b]title\x07\x1bP1$qm\x1b\\\x1b_payload\x1b\\\x1b^pm\x1b\\\x1bXsos\x1b\\\x1b#8")
+		write(terminal, "\x1b[?1234h\x1b[20h")
+
+		So(unsupported(terminal.DrainEvents()), ShouldResemble, []string{
+			"CSI ? 1234 h", "CSI 6 n", "CSI > c", "CSI 3 m",
+			"OSC 52", "OSC", "DCS 1 $ q", "APC", "PM", "SOS", "ESC # 8",
+			"CSI 20 h",
+		})
+		So(terminal.Snapshot().Text(), ShouldEqual, "        \n        ")
+	})
+
+	Convey("Unsupported sequences are not misread as supported ones", t, func() {
+		terminal := newTerminal(8, 3)
+		write(terminal, "\x1b[2;3H\x1b7\x1b[3;6H")
+
+		write(terminal, "\x1b#8\x1b[1;2$r\x1b[38;2;1;4;5mA\x1b[0;48:2::1:4:5mB")
+		screen := terminal.Snapshot()
+		So(screen.Cursor.Row, ShouldEqual, 2)
+		So(screen.Cursor.Column, ShouldEqual, 7)
+		So(screen.Line(2), ShouldEqual, "     AB ")
+		for column := 5; column <= 6; column++ {
+			cell, _ := screen.CellAt(column, 2)
+			So(cell.Attributes, ShouldEqual, tuicast.Attributes(0))
+		}
+		So(unsupported(terminal.DrainEvents()), ShouldResemble, []string{"ESC # 8", "CSI 1;2 $ r", "CSI 38;2 m", "CSI 48;2 m"})
+	})
+
+	Convey("Distinct unsupported reports are bounded", t, func() {
+		terminal := newTerminal(8, 1)
+		for mode := 3000; mode < 3300; mode++ {
+			write(terminal, fmt.Sprintf("\x1b[?%dh", mode))
+		}
+		So(unsupported(terminal.DrainEvents()), ShouldHaveLength, 256)
+	})
+}
+
+func unsupported(events []tuicast.TerminalEvent) []string {
+	sequences := make([]string, 0, len(events))
+	for _, event := range events {
+		So(event.Type, ShouldEqual, tuicast.EventUnsupported)
+		sequences = append(sequences, event.Data)
+	}
+	return sequences
 }
 
 func newTerminal(width, height int) *xterm.Terminal {

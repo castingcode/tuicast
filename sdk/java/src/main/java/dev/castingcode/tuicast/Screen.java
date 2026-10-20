@@ -3,10 +3,21 @@ package dev.castingcode.tuicast;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * A detached terminal snapshot. {@code title} is the window title most recently set by the host, or
+ * empty when unset.
+ */
 public record Screen(
-    int width, int height, List<Cell> cells, Cursor cursor, long revision, String text) {
+    int width,
+    int height,
+    List<Cell> cells,
+    Cursor cursor,
+    long revision,
+    String text,
+    String title) {
   public Screen {
     cells = List.copyOf(cells);
+    if (title == null) title = "";
   }
 
   public record Cell(String text, int width, int foreground, int background, int attributes) {

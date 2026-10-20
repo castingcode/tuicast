@@ -3,8 +3,12 @@
 The Java 21 SDK in `sdk/java` is a thin, thread-safe JSON-RPC v1 client for a
 child `tuicast-driver`. It uses one reader virtual thread, correlates concurrent
 out-of-order replies, and exposes `Driver`, `Connection`, `Session`, immutable
-`Screen` snapshots, typed SSH/Telnet configuration, matchers, waits, and bounded
-screen/event subscriptions. All lifecycle types are idempotent `AutoCloseable`s.
+`Screen` snapshots, typed SSH/Telnet configuration, matchers, waits, session-end
+state (`Session.state()` and `Session.waitForEnd()`), and bounded screen/event
+subscriptions. `Color` names cell palette indexes alongside the `Screen`
+attribute constants. All lifecycle types are idempotent `AutoCloseable`s.
+Drivers may add result fields within protocol version 1, so the SDK ignores
+unknown JSON fields.
 
 Install Java and Maven with SDKMAN when needed:
 

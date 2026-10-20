@@ -223,6 +223,7 @@ type screenResult struct {
 	Cursor   cursorResult `json:"cursor"`
 	Revision uint64       `json:"revision"`
 	Text     string       `json:"text"`
+	Title    string       `json:"title,omitempty"`
 }
 
 type cellResult struct {
@@ -261,6 +262,7 @@ func makeScreen(screen tuicast.Screen) screenResult {
 		},
 		Revision: screen.Revision,
 		Text:     screen.Text(),
+		Title:    screen.Title,
 	}
 }
 

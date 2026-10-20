@@ -107,34 +107,35 @@ scoops:
       name: scoop-bucket
       token: "{{ .Env.GH_PACKAGE_MANAGER_TOKEN }}"
 
-winget:
-  - name: TUICast
-    ids: [release]
-    publisher: CastingCode
-    package_identifier: CastingCode.TUICast
-    package_name: TUICast
-    short_description: Terminal session management and automation for testing text user interfaces.
-    description: Automate concurrent SSH and Telnet terminal sessions through an embeddable Go API, language SDKs, and command-line tools.
-    homepage: https://github.com/castingcode/tuicast
-    publisher_url: https://github.com/castingcode
-    publisher_support_url: https://github.com/castingcode/tuicast/issues
-    license: MIT
-    license_url: https://github.com/castingcode/tuicast/blob/main/LICENSE
-    release_notes_url: https://github.com/castingcode/tuicast/releases/tag/{{ .Tag }}
-    tags: [automation, cli, ssh, telnet, terminal, testing, tui]
-    commit_msg_template: "Update: {{ .PackageIdentifier }} to {{ .Version }}"
-    repository:
-      owner: castingcode
-      name: winget-pkgs
-      branch: tuicast-{{ .Version }}
-      token: "{{ .Env.GH_PACKAGE_MANAGER_TOKEN }}"
-      pull_request:
-        enabled: true
-        token: "{{ .Env.GH_WINGET_PULL_REQUEST_TOKEN }}"
-        base:
-          owner: microsoft
-          name: winget-pkgs
-          branch: master
+# TODO: Need to set up code signing so winget PR passes defender check
+# winget:
+#   - name: TUICast
+#     ids: [release]
+#     publisher: CastingCode
+#     package_identifier: CastingCode.TUICast
+#     package_name: TUICast
+#     short_description: Terminal session management and automation for testing text user interfaces.
+#     description: Automate concurrent SSH and Telnet terminal sessions through an embeddable Go API, language SDKs, and command-line tools.
+#     homepage: https://github.com/castingcode/tuicast
+#     publisher_url: https://github.com/castingcode
+#     publisher_support_url: https://github.com/castingcode/tuicast/issues
+#     license: MIT
+#     license_url: https://github.com/castingcode/tuicast/blob/main/LICENSE
+#     release_notes_url: https://github.com/castingcode/tuicast/releases/tag/{{ .Tag }}
+#     tags: [automation, cli, ssh, telnet, terminal, testing, tui]
+#     commit_msg_template: "Update: {{ .PackageIdentifier }} to {{ .Version }}"
+#     repository:
+#       owner: castingcode
+#       name: winget-pkgs
+#       branch: tuicast-{{ .Version }}
+#       token: "{{ .Env.GH_PACKAGE_MANAGER_TOKEN }}"
+#       pull_request:
+#         enabled: true
+#         token: "{{ .Env.GH_WINGET_PULL_REQUEST_TOKEN }}"
+#         base:
+#           owner: microsoft
+#           name: winget-pkgs
+#           branch: master
 
 release:
   prerelease: auto

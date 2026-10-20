@@ -207,15 +207,21 @@ test("BELL and ENQ events arrive in order after configured answerback", async ()
       await openScenario(session, 11, "BELL / ENQ ANSWERBACK");
       const subscription = await session.subscribeEvents();
       const events = subscription[Symbol.asyncIterator]();
+      // Skip reports of sequences the terminal ignored at startup.
+      const nextEvent = async () => {
+        let event = (await events.next()).value;
+        while (event?.type === "unsupported") {
+          event = (await events.next()).value;
+        }
+        return event;
+      };
       try {
         await session.press("b");
-        assert.deepEqual((await events.next()).value, {
-          sequence: 1,
-          type: "bell",
-        });
+        const bell = await nextEvent();
+        assert.equal(bell?.type, "bell");
         await session.press("e");
-        assert.deepEqual((await events.next()).value, {
-          sequence: 2,
+        assert.deepEqual(await nextEvent(), {
+          sequence: bell!.sequence + 1,
           type: "enquiry",
           data: "TUICAST-ANSWER",
         });

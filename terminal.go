@@ -31,10 +31,14 @@ type TerminalEventType string
 const (
 	EventBell    TerminalEventType = "bell"
 	EventEnquiry TerminalEventType = "enquiry"
+	// EventUnsupported reports host output that the terminal profile does not
+	// implement and therefore ignored. Each distinct sequence is reported once.
+	EventUnsupported TerminalEventType = "unsupported"
 )
 
 // TerminalEvent reports a terminal control event. Sequence is assigned by the
-// session; Data contains the configured answerback for an enquiry.
+// session. Data contains the configured answerback for an enquiry and the
+// ignored sequence, such as "CSI ? 2004 h", for an unsupported event.
 type TerminalEvent struct {
 	Sequence uint64
 	Type     TerminalEventType

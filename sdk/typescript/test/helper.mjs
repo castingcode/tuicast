@@ -11,6 +11,7 @@ const screen = (revision = 3) => ({
   height: 1,
   revision,
   text: "READY",
+  title: "RF-01",
   cursor: { column: 0, row: 0, visible: true },
   cells: [..."READY"].map(cell),
 });
@@ -61,6 +62,14 @@ rl.on("line", (line) => {
     case "session.waitForIdle":
       r.result = screen();
       break;
+    case "session.state":
+      r.result = { state: "active" };
+      break;
+    case "session.waitForEnd":
+      if (q.params.sessionId === 22 && q.params.timeoutMilliseconds === 250)
+        r.result = { state: "ended", error: "reading terminal output: reset" };
+      else r.error = { code: -32602, message: "unexpected waitForEnd params" };
+      break;
     case "session.wait":
       if (q.params.matcher.contains === "MISSING") {
         r.error = {
@@ -91,6 +100,14 @@ rl.on("line", (line) => {
         jsonrpc: "2.0",
         method: "session.event",
         params: { subscriptionId: 34, event: { sequence: 1, type: "bell" } },
+      });
+      send({
+        jsonrpc: "2.0",
+        method: "session.event",
+        params: {
+          subscriptionId: 34,
+          event: { sequence: 2, type: "unsupported", data: "CSI ? 2004 h" },
+        },
       });
       return;
     case "session.unsubscribe":

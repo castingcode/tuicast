@@ -78,24 +78,17 @@ func (s *Server) DriverSnapshot() Snapshot {
 	}
 	for _, registered := range sessions {
 		screen := registered.session.Screen()
-		session := SessionSnapshot{
+		state := makeSessionStateResult(registered.session)
+		result.Sessions = append(result.Sessions, SessionSnapshot{
 			ID:           registered.id,
 			ConnectionID: registered.connectionID,
 			Terminal:     registered.terminal,
 			Width:        screen.Width,
 			Height:       screen.Height,
 			Revision:     screen.Revision,
-			State:        "active",
-		}
-		select {
-		case <-registered.session.Done():
-			session.State = "ended"
-			if err := registered.session.Err(); err != nil {
-				session.Error = err.Error()
-			}
-		default:
-		}
-		result.Sessions = append(result.Sessions, session)
+			State:        state.State,
+			Error:        state.Error,
+		})
 	}
 	return result
 }

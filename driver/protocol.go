@@ -116,6 +116,7 @@ type screenResult struct {
 	Cursor   cursorResult `json:"cursor"`
 	Revision uint64       `json:"revision"`
 	Text     string       `json:"text"`
+	Title    string       `json:"title,omitempty"`
 }
 
 type cellResult struct {
@@ -136,6 +137,26 @@ type terminalEventResult struct {
 	Sequence uint64 `json:"sequence"`
 	Type     string `json:"type"`
 	Data     string `json:"data,omitempty"`
+}
+
+// sessionStateResult reports whether a session is still running. Error is
+// set only when a transport or terminal failure ended the session.
+type sessionStateResult struct {
+	State string `json:"state"`
+	Error string `json:"error,omitempty"`
+}
+
+func makeSessionStateResult(session *tuicast.Session) sessionStateResult {
+	select {
+	case <-session.Done():
+		result := sessionStateResult{State: "ended"}
+		if err := session.Err(); err != nil {
+			result.Error = err.Error()
+		}
+		return result
+	default:
+		return sessionStateResult{State: "active"}
+	}
 }
 
 type waitErrorData struct {

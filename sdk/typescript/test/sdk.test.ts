@@ -8,6 +8,8 @@ import {
   WaitError,
   isTimeout,
   Attributes,
+  Color,
+  hasAttributes,
   all,
   contains,
   not,
@@ -45,7 +47,10 @@ test("lifecycle, concurrent correlation, waits and subscriptions", async () => {
   assert.equal(s.id, 22);
   await Promise.all(
     Array.from({ length: 12 }, () =>
-      s.screen().then((x) => assert.equal(x.text, "READY")),
+      s.screen().then((x) => {
+        assert.equal(x.text, "READY");
+        assert.equal(x.title, "RF-01");
+      }),
     ),
   );
   await s.type("x");
@@ -63,16 +68,24 @@ test("lifecycle, concurrent correlation, waits and subscriptions", async () => {
   await screens.close();
   await screens.close();
   const events = await s.subscribeEvents();
-  assert.equal(
-    (await events[Symbol.asyncIterator]().next()).value?.type,
-    "bell",
-  );
+  const eventIterator = events[Symbol.asyncIterator]();
+  assert.equal((await eventIterator.next()).value?.type, "bell");
+  assert.deepEqual((await eventIterator.next()).value, {
+    sequence: 2,
+    type: "unsupported",
+    data: "CSI ? 2004 h",
+  });
   await events.close();
   await assert.rejects(
     s.waitForText("MISSING"),
     (e) =>
       e instanceof WaitError && isTimeout(e) && e.lastScreen.text === "READY",
   );
+  assert.deepEqual(await s.state(), { ended: false });
+  assert.deepEqual(await s.waitForEnd({ timeout: 250 }), {
+    ended: true,
+    error: "reading terminal output: reset",
+  });
   await s.close();
   await s.close();
   await c.close();
@@ -104,6 +117,17 @@ test("configuration, cancellation and protocol failures", async () => {
   const s = await c.openSession();
   await assert.rejects(s.screen({ signal: AbortSignal.abort() }));
   assert.equal(Attributes.Bold, 1);
+  const cell = {
+    text: "A",
+    width: 1,
+    foreground: Color.Red,
+    background: Color.Default,
+    attributes: Attributes.Bold | Attributes.Underline,
+  };
+  assert.equal(cell.foreground, 1);
+  assert.equal(cell.background, -1);
+  assert(hasAttributes(cell, Attributes.Bold | Attributes.Underline));
+  assert(!hasAttributes(cell, Attributes.Bold | Attributes.Reverse));
   await d.close();
   for (const bad of ["2", "json", "version"]) {
     await assert.rejects(

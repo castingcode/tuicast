@@ -126,10 +126,12 @@ exec op read "op://WMS/$1/password"
 | `tuicast_list_profiles` | List safe metadata for approved profiles. |
 | `tuicast_connect` | Connect to an approved profile. |
 | `tuicast_open_session` | Open a terminal with profile-defined settings. |
-| `tuicast_screen` | Read the current text screen and cursor. |
+| `tuicast_screen` | Read the current text screen, cursor, and session state. |
 | `tuicast_wait_for_text` | Wait up to 120 seconds for exact text. |
 | `tuicast_wait` | Wait for a matcher expression, optionally until stable. |
 | `tuicast_wait_for_idle` | Wait until host output has been quiet for a period. |
+| `tuicast_wait_for_end` | Wait until the host ends a session, such as after a sign-out. |
+| `tuicast_events` | Read bell, enquiry, and unsupported-sequence events. |
 | `tuicast_type` | Send literal text without logging it. |
 | `tuicast_press` | Send a named or printable key with modifiers. |
 | `tuicast_start_recording` | Start recording a session's successful operations. |
@@ -151,6 +153,18 @@ expectation it will write, so MCP waits use the same semantics as the driver:
   (`contains`, `line`, `cursor`, `all`, `any`, and `not`) and an optional
   `stableMilliseconds` quiet period, matching `session.wait`.
 - `tuicast_wait_for_idle` matches `session.waitForIdle`.
+- `tuicast_wait_for_end` matches `session.waitForEnd` and returns the final
+  screen. Every screen result also includes `title` when the host has set a
+  window title, `sessionState` (`active` or `ended`) and, when a transport or
+  terminal failure ended the session, `sessionError`, matching `session.state`.
+  An ended session's final screen remains readable until it is closed.
+- `tuicast_events` exposes the events an SDK receives from `subscribeEvents`.
+  MCP tools cannot push notifications, so the tool returns the session's
+  retained events after an `afterSequence` instead. Each session retains its
+  most recent 256 events from the moment it opens, so startup events such as
+  unsupported-sequence probes are not lost while the agent is busy. `missed`
+  counts requested events that are no longer retained. Bells matter for
+  automation because RF and warehouse applications commonly beep on errors.
 
 Both packages decode matchers through `tuicast.MatcherSpec`, so the
 expressions cannot drift apart. Because the expressions are recursive, the
@@ -160,8 +174,8 @@ durations are capped at 120 seconds; a zero timeout uses the 10-second default.
 ### Recordings
 
 `tuicast_start_recording` and `tuicast_stop_recording` capture a session's
-successful `type`, `press`, and wait operations as a versioned trace in the
-Workbench recording format described by
+successful `type`, `press`, and wait operations, including `waitForEnd`, as a
+versioned trace in the Workbench recording format described by
 `schema/workbench-recording.schema.json`. Screen reads and failed operations
 are not recorded, so an agent can explore freely and then record a clean run
 of the path it wants to test. Each step maps directly onto an SDK call, giving

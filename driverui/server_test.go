@@ -50,6 +50,7 @@ func TestInspector(t *testing.T) {
 			Width: 2, Height: 1, Revision: 7,
 			Cells:  []tuicast.Cell{{Text: "O", Width: 1}, {Text: "K", Width: 1}},
 			Cursor: tuicast.Cursor{Column: 1, Row: 0, Visible: true},
+			Title:  "RF-01",
 		}
 		close(screens)
 		source := &fakeSource{snapshot: populatedSnapshot(), screens: screens}
@@ -61,7 +62,7 @@ func TestInspector(t *testing.T) {
 		So(response.Header().Get("Content-Type"), ShouldEqual, "text/event-stream")
 		So(response.Body.String(), ShouldContainSubstring, "event: screen\n")
 		So(response.Body.String(), ShouldContainSubstring, `"revision":7`)
-		So(response.Body.String(), ShouldContainSubstring, `"text":"OK"`)
+		So(response.Body.String(), ShouldContainSubstring, `"text":"OK","title":"RF-01"`)
 	})
 
 	Convey("Unknown sessions and unsupported methods are rejected", t, func() {

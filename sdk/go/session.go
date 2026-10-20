@@ -125,9 +125,14 @@ type TerminalEventType string
 const (
 	EventBell    TerminalEventType = "bell"
 	EventEnquiry TerminalEventType = "enquiry"
+	// EventUnsupported reports host output the terminal profile ignored. Each
+	// distinct sequence is reported once per session.
+	EventUnsupported TerminalEventType = "unsupported"
 )
 
-// TerminalEvent is a BELL or ENQ event. Data is the configured answerback for ENQ.
+// TerminalEvent is a BELL, ENQ, or unsupported-sequence event. Data is the
+// configured answerback for ENQ and the ignored sequence, such as
+// "CSI ? 2004 h", for an unsupported event.
 type TerminalEvent struct {
 	Sequence uint64            `json:"sequence"`
 	Type     TerminalEventType `json:"type"`
@@ -227,8 +232,9 @@ func (s *Session) Subscribe(ctx context.Context) (*ScreenSubscription, error) {
 	return result, nil
 }
 
-// SubscribeEvents subscribes to BELL and ENQ events. Events are buffered in
-// order. If the consumer cannot keep up, Events is closed rather than blocking
+// SubscribeEvents subscribes to BELL, ENQ, and unsupported-sequence events.
+// The subscription starts with up to the 64 most recent events the session
+// retains, then delivers live events. Events are buffered in order. If the consumer cannot keep up, Events is closed rather than blocking
 // unrelated driver responses; callers should continue reading it promptly.
 func (s *Session) SubscribeEvents(ctx context.Context) (*EventSubscription, error) {
 	channel := make(chan TerminalEvent, 64)
@@ -498,6 +504,65 @@ func (s *Session) WaitForIdle(ctx context.Context, options ...IdleOption) (Scree
 		return Screen{}, fmt.Errorf("waiting for idle session: %w", err)
 	}
 	return screen, nil
+}
+
+// SessionState reports whether the host has ended a session.
+type SessionState struct {
+	// Ended reports whether the session has stopped. An ended session's final
+	// screen remains readable until the session is closed.
+	Ended bool
+	// Error describes the transport or terminal failure that ended the
+	// session. It is empty while the session is active and after a normal end.
+	Error string
+}
+
+type sessionStateResult struct {
+	State string `json:"state"`
+	Error string `json:"error"`
+}
+
+func (r sessionStateResult) sessionState() SessionState {
+	return SessionState{Ended: r.State == "ended", Error: r.Error}
+}
+
+// State reports whether the session is active or has ended, without waiting.
+func (s *Session) State(ctx context.Context) (SessionState, error) {
+	operationContext, cancel := s.connection.client.operationContext(ctx, s.connection.client.defaultTimeout)
+	defer cancel()
+	var result sessionStateResult
+	if err := s.connection.client.call(operationContext, "session.state", map[string]any{"sessionId": s.id}, &result); err != nil {
+		return SessionState{}, fmt.Errorf("reading session state: %w", err)
+	}
+	return result.sessionState(), nil
+}
+
+// WaitForEnd waits until the host ends the session, such as after a sign-out.
+// WaitTimeout overrides the client's default timeout; StableFor does not
+// apply. A timeout returns a *WaitError with the last screen.
+func (s *Session) WaitForEnd(ctx context.Context, options ...WaitOption) (SessionState, error) {
+	config := waitConfig{timeout: s.connection.client.defaultTimeout}
+	for _, option := range options {
+		if option == nil {
+			return SessionState{}, fmt.Errorf("waiting for session end: wait option is required")
+		}
+		if err := option(&config); err != nil {
+			return SessionState{}, fmt.Errorf("waiting for session end: %w", err)
+		}
+	}
+	if config.stableFor > 0 {
+		return SessionState{}, fmt.Errorf("waiting for session end: a stable period does not apply")
+	}
+	timeoutMilliseconds, _ := positiveMilliseconds(config.timeout)
+	operationContext, cancel := s.connection.client.driverOperationContext(ctx, config.timeout)
+	defer cancel()
+	var result sessionStateResult
+	if err := s.connection.client.call(operationContext, "session.waitForEnd", map[string]any{
+		"sessionId":           s.id,
+		"timeoutMilliseconds": timeoutMilliseconds,
+	}, &result); err != nil {
+		return SessionState{}, fmt.Errorf("waiting for session end: %w", err)
+	}
+	return result.sessionState(), nil
 }
 
 // Close closes the session. It is idempotent.

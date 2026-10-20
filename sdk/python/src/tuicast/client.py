@@ -10,7 +10,17 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, BinaryIO, Generic, Literal, TextIO, TypeVar, overload
 
-from .model import Key, Matcher, Modifier, Screen, Terminal, TerminalEvent, contains, not_
+from .model import (
+    Key,
+    Matcher,
+    Modifier,
+    Screen,
+    SessionState,
+    Terminal,
+    TerminalEvent,
+    contains,
+    not_,
+)
 
 PROTOCOL_VERSION = "1"
 
@@ -410,6 +420,21 @@ class Session:
         }
         return Screen.from_dict(
             self.driver._call("session.waitForIdle", params, timeout=duration + 1)
+        )
+
+    def state(self) -> SessionState:
+        """Report whether the session is active or has ended, without waiting."""
+        return SessionState.from_dict(self.driver._call("session.state", {"sessionId": self.id}))
+
+    def wait_for_end(self, *, timeout: float | None = None) -> SessionState:
+        """Wait until the host ends the session, such as after a sign-out.
+
+        A timeout raises ``WaitError`` with the last screen.
+        """
+        duration = _positive(timeout or self.driver.default_timeout, "wait timeout")
+        params = {"sessionId": self.id, "timeoutMilliseconds": _milliseconds(duration)}
+        return SessionState.from_dict(
+            self.driver._call("session.waitForEnd", params, timeout=duration + 1)
         )
 
     def subscribe(self) -> ScreenSubscription:

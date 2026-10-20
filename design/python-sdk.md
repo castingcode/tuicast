@@ -4,7 +4,8 @@ The independently publishable Python 3.12+ package is in `sdk/python` and is a
 thin synchronous client for protocol v1 over a child `tuicast-driver` process.
 It provides typed SSH/Telnet configuration and `Driver`, `Connection`, and
 `Session` context managers. Driver-side waits preserve timing semantics;
-detached immutable `Screen` values provide local queries.
+detached immutable `Screen` values provide local queries. `Session.state()` and
+`Session.wait_for_end()` report when the host ends a session.
 
 ## Mandatory development environment
 

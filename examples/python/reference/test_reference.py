@@ -78,11 +78,20 @@ def test_terminal_event_subscription(fixture):
         login(session)
         open_scenario(session, 11, "BELL / ENQ ANSWERBACK")
         with session.subscribe_events() as events:
+
+            def next_event() -> tuicast.TerminalEvent:
+                # Skip reports of sequences the terminal ignored at startup.
+                event = events.get(timeout=1)
+                while event.type == "unsupported":
+                    event = events.get(timeout=1)
+                return event
+
             session.press("b")
-            assert events.get(timeout=1) == tuicast.TerminalEvent(1, "bell")
+            bell = next_event()
+            assert bell.type == "bell"
             session.press("e")
-            assert events.get(timeout=1) == tuicast.TerminalEvent(
-                2, "enquiry", "TUICAST-ANSWER"
+            assert next_event() == tuicast.TerminalEvent(
+                bell.sequence + 1, "enquiry", "TUICAST-ANSWER"
             )
         screen = session.wait_for_text('Answerback: "TUICAST-ANSWER"')
         assert screen.contains("BEL emitted: 1 / 1")

@@ -48,6 +48,23 @@ public final class HelperDriver {
                   "session.unsubscribe" ->
               result = Map.of("ok", true);
           case "session.screen", "session.waitForIdle" -> result = screen(3);
+          case "session.state" -> result = Map.of("state", "active");
+          case "session.waitForEnd" -> {
+            var params = request.path("params");
+            if (params.path("sessionId").asLong() != 22
+                || params.path("timeoutMilliseconds").asLong() != 250) {
+              write(
+                  Map.of(
+                      "jsonrpc",
+                      "2.0",
+                      "id",
+                      id,
+                      "error",
+                      Map.of("code", -32602, "message", "unexpected waitForEnd params")));
+              continue;
+            }
+            result = Map.of("state", "ended", "error", "reading terminal output: reset");
+          }
           case "session.wait" -> {
             if (request
                 .path("params")
@@ -84,6 +101,7 @@ public final class HelperDriver {
             if (method.endsWith("Events")) {
               notifyEvent(1, "bell", "");
               notifyEvent(2, "enquiry", "TUICAST");
+              notifyEvent(3, "unsupported", "CSI ? 2004 h");
             } else {
               notifyScreen(1);
               notifyScreen(2);
@@ -166,6 +184,8 @@ public final class HelperDriver {
     value.put("cursor", Map.of("column", 0, "row", 0, "visible", true));
     value.put("revision", revision);
     value.put("text", "READY");
+    value.put("title", "RF-01");
+    value.put("futureField", true);
     return value;
   }
 }

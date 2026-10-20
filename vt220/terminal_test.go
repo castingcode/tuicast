@@ -200,6 +200,36 @@ func TestTerminal(t *testing.T) {
 		So(screen.Height, ShouldEqual, 3)
 		So(screen.Text(), ShouldEqual, "AB \nCD \n   ")
 	})
+
+	Convey("Autowrap and cursor visibility follow DECAWM and DECTCEM", t, func() {
+		terminal := newTerminal(4, 2)
+
+		write(terminal, "\x1b[?25l\x1b[?7lABCDE")
+		screen := terminal.Snapshot()
+		So(screen.Text(), ShouldEqual, "ABCE\n    ")
+		So(screen.Cursor, ShouldResemble, tuicast.Cursor{Column: 3, Row: 0, Visible: false})
+
+		write(terminal, "\x1b[?25h\x1b[?7h\x1b[2;1HWXYZQ")
+		screen = terminal.Snapshot()
+		So(screen.Text(), ShouldEqual, "WXYZ\nQ   ")
+		So(screen.Cursor, ShouldResemble, tuicast.Cursor{Column: 1, Row: 1, Visible: true})
+		So(terminal.DrainEvents(), ShouldBeEmpty)
+	})
+
+	Convey("xterm-only sequences are reported rather than applied", t, func() {
+		terminal := newTerminal(4, 1)
+
+		write(terminal, "\x1b]2;RF-01\x1b\\\x1b[?1049h\x1b[?2004h\x1b[91mA\x1b[38;5;1mB")
+		screen := terminal.Snapshot()
+		So(screen.Title, ShouldBeEmpty)
+		So(screen.Line(0), ShouldEqual, "AB  ")
+		var sequences []string
+		for _, event := range terminal.DrainEvents() {
+			So(event.Type, ShouldEqual, tuicast.EventUnsupported)
+			sequences = append(sequences, event.Data)
+		}
+		So(sequences, ShouldResemble, []string{"OSC 2", "CSI ? 1049 h", "CSI 91 m", "CSI 38 m"})
+	})
 }
 
 func newTerminal(width, height int) *vt220.Terminal {
