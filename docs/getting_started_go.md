@@ -6,7 +6,7 @@ and terminal emulation.
 
 ## Prerequisites
 
-- Go 1.24.5 or newer
+- Go 1.27.3 or newer
 - `tuicast-driver` installed and available on `PATH`
 
 On macOS or Linux, install the driver and the reference TUI used by this guide:

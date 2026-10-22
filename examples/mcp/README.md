@@ -7,7 +7,7 @@ type, and dimensions.
 
 ## Prerequisites
 
-- Go 1.24 or newer when building from this checkout
+- Go 1.27.3 or newer when building from this checkout
 - VS Code with GitHub Copilot, Cursor, or another MCP client with stdio support
 - `tuicast-mcp` and `reference-tui` available on `PATH`
 

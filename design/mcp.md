@@ -198,7 +198,7 @@ closing the session discards it.
 
 The server uses the official `github.com/modelcontextprotocol/go-sdk` at
 v1.4.0. It supports MCP protocol versions through 2025-11-25 and is the newest
-release compatible with TUICast's Go 1.24 baseline. The SDK is transitioning
+release compatible with the previous Go 1.24 baseline. The SDK is transitioning
 from MIT to Apache-2.0 licensing; both licenses are compatible with TUICast's
-Apache-2.0 license. Later SDK releases require Go 1.25 and should be considered
-when TUICast intentionally raises its Go baseline.
+Apache-2.0 license. Later SDK releases require Go 1.25. The Go baseline is now
+1.27.3, so those releases can be considered on a future dependency bump.

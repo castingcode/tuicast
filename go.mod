@@ -1,6 +1,6 @@
 module github.com/castingcode/tuicast
 
-go 1.24.5
+go 1.27.3
 
 require (
 	charm.land/bubbles/v2 v2.0.0

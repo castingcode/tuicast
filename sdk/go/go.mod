@@ -1,6 +1,6 @@
 module github.com/castingcode/tuicast/sdk/go
 
-go 1.24.5
+go 1.27.3
 
 require github.com/smartystreets/goconvey v1.8.1
 
