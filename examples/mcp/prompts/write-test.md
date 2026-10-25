@@ -5,7 +5,7 @@ automated TUICast test for the workflow you verified.
 
 Write the test in the language of the TUICast SDK you use. Read its getting
 started guide first, for example
-[`docs/getting_started_python.md`](../../../docs/getting_started_python.md),
+[`docs/content/getting-started/python.md`](../../../docs/content/getting-started/python.md),
 and use only the SDK API it documents.
 
 The test should verify this behavior: after logging in with application user

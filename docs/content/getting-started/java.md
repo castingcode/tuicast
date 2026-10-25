@@ -1,4 +1,9 @@
-# Getting started with TUICast for Java
+---
+title: "Get started with Java"
+linkTitle: "Java"
+description: "Install the TUICast Java SDK and write a Java program that logs in to a terminal application over SSH and checks the resulting screen."
+weight: 60
+---
 
 TUICast lets Java applications control interactive terminal applications over
 SSH or Telnet. The Java SDK launches `tuicast-driver`, which owns the network
@@ -19,8 +24,8 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-See the [main installation instructions](../README.md#driver-and-other-binaries---using-the-install-script)
-for Windows and other installation options.
+See [Installation](installation.md) for Windows, package managers, and other
+options.
 
 ## Install the SDK
 
@@ -163,3 +168,12 @@ For a real SSH server, replace `insecureSkipHostKeyCheck(true)` with exactly one
 trusted host-key option: `knownHostsFile(...)` or `hostKeyFingerprint(...)`.
 As in this example, keep application and SSH credentials in environment
 variables or a secret manager rather than in source code.
+
+## Next steps
+
+- [Screens and waiting](../concepts/screens-and-waiting.md) explains how a wait
+  decides that the application is ready.
+- [Connect to your application](../guides/connect-to-your-application.md)
+  replaces the reference TUI with your own SSH or Telnet host.
+- The [Java examples](https://github.com/castingcode/tuicast/tree/main/examples/java)
+  cover forms, tables, resizing, concurrent sessions, and Cucumber.
