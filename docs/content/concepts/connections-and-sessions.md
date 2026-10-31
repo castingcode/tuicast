@@ -15,7 +15,7 @@ Driver
     └── Session (one terminal: screen, cursor, input)
 ```
 
-## SSH and Telnet differ
+## SSH and Telnet Differ
 
 | | SSH | Telnet |
 | --- | --- | --- |
@@ -31,13 +31,13 @@ more sessions, open more connections. See
 A Telnet connection carries exactly one session, so each simulated user needs
 its own connection.
 
-## Each session is isolated
+## Each Session is Isolated
 
 Each session has its own screen, cursor, terminal type, and size. Typing into
 one session never affects another, and waits on different sessions run
 independently. This is what lets one test drive many simulated users at once.
 
-## How sessions end
+## How Sessions End
 
 A session ends when:
 
@@ -50,7 +50,7 @@ not an error. The final screen stays readable until you close the session, so a
 test can check a sign-out message. Sending input to an ended session fails.
 Your code can wait for a session to end, which is useful for testing sign-out.
 
-## Closing releases everything below
+## Closing Releases Everything Below
 
 Closing is safe to repeat and works top-down:
 
