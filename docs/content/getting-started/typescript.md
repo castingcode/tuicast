@@ -1,4 +1,9 @@
-# Getting started with TUICast for TypeScript
+---
+title: "Get started with TypeScript"
+linkTitle: "TypeScript"
+description: "Install the TUICast TypeScript SDK and write a Node.js program that logs in to a terminal application over SSH and checks the resulting screen."
+weight: 50
+---
 
 TUICast lets Node.js applications control interactive terminal applications
 over SSH or Telnet. The TypeScript SDK launches `tuicast-driver`, which owns the
@@ -18,8 +23,8 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-See the [main installation instructions](../README.md#driver-and-other-binaries---using-the-install-script)
-for Windows and other installation options.
+See [Installation](installation.md) for Windows, package managers, and other
+options.
 
 ## Install the SDK
 
@@ -136,3 +141,12 @@ For a real SSH server, replace `insecureSkipHostKeyCheck` with exactly one
 trusted host-key option: `knownHostsFile` or `hostKeyFingerprint`. As in this
 example, keep application and SSH credentials in environment variables or a
 secret manager rather than in source code.
+
+## Next steps
+
+- [Screens and waiting](../concepts/screens-and-waiting.md) explains how a wait
+  decides that the application is ready.
+- [Connect to your application](../guides/connect-to-your-application.md)
+  replaces the reference TUI with your own SSH or Telnet host.
+- The [TypeScript examples](https://github.com/castingcode/tuicast/tree/main/examples/typescript)
+  cover forms, tables, resizing, concurrent sessions, and Cucumber.

@@ -1,0 +1,61 @@
+# Hugo configuration for the TUICast documentation site. Build from the
+# repository root with `hugo --source docs`. See design/documentation.md.
+
+baseURL = 'https://tuicast.castingcode.dev/'
+locale = 'en-US'
+title = 'TUICast'
+enableRobotsTXT = true
+enableGitInfo = true
+disableKinds = ['taxonomy', 'term']
+
+[module]
+  [[module.imports]]
+    path = 'github.com/imfing/hextra'
+
+[params]
+  description = 'Automate and test terminal applications over SSH and Telnet.'
+  displayUpdatedDate = true
+  dateFormat = 'January 2, 2006'
+  [params.navbar]
+    displayTitle = true
+    displayLogo = false
+  [params.page]
+    width = 'normal'
+    [params.page.contextMenu]
+      enable = true
+  [params.editURL]
+    enable = true
+    base = 'https://github.com/castingcode/tuicast/edit/main/docs/content'
+  [params.theme]
+    default = 'system'
+    displayToggle = true
+
+[outputs]
+  home = ['html', 'llms']
+  page = ['html', 'markdown']
+  section = ['html', 'markdown']
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      # Allows the <!-- VERIFY --> and <!-- WRITER --> review comments.
+      unsafe = true
+    [markup.goldmark.renderHooks.link]
+      # Resolve relative links to .md files, which also work on GitHub.
+      useEmbedded = 'fallback'
+
+[[menu.main]]
+  name = 'Docs'
+  pageRef = '/getting-started'
+  weight = 10
+[[menu.main]]
+  name = 'Search'
+  weight = 20
+  [menu.main.params]
+    type = 'search'
+[[menu.main]]
+  name = 'GitHub'
+  url = 'https://github.com/castingcode/tuicast'
+  weight = 30
+  [menu.main.params]
+    icon = 'github'
