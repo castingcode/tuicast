@@ -20,7 +20,7 @@ terminal, and keeps an up-to-date copy of the screen. Your code, through an
 └───────────┘            └──────────────────────┘          └──────────────┘
 ```
 
-## The driver
+## The Driver
 
 `tuicast-driver` is a single binary that does the hard work: it opens SSH and
 Telnet connections, negotiates terminal settings, interprets the escape
@@ -44,14 +44,14 @@ through its [protocol](../reference/driver-protocol.md).
 Go programs can also [embed TUICast as a library](../guides/embed-the-go-library.md)
 without a separate driver process.
 
-## The MCP server
+## The MCP Server
 
 `tuicast-mcp` lets AI agents operate terminal applications through the Model
 Context Protocol (MCP). It is a separate, optional binary with its own security
 boundary: agents can use only connections an operator has approved. See
 [Use AI agents with MCP](../guides/use-ai-agents-with-mcp.md).
 
-## Supporting tools
+## Supporting Tools
 
 - The [reference TUI](../getting-started/reference-tui.md) is a practice
   application for learning, demos, and TUICast's own tests.
@@ -61,7 +61,7 @@ boundary: agents can use only connections an operator has approved. See
   [record a workflow](../guides/record-workflows-with-workbench.md) from a live
   session.
 
-## What TUICast does not do
+## What TUICast Does NOT Do
 
 - It does not change or instrument the application. It sees only what a user's
   terminal would see.
