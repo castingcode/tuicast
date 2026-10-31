@@ -42,11 +42,11 @@ combination. See [Matchers](../reference/matchers.md).
 
 ## Three Kinds of Wait
 
-| Wait | Returns when | Use it when |
+| Wait | Returns When | Use It When |
 | --- | --- | --- |
 | Wait | the matcher first succeeds | the expected text appears only when the screen is complete |
-| Stable wait | the matcher succeeds and the host has then been silent for a quiet period | the text appears before the application finishes drawing |
-| Idle wait | the host has been silent for a quiet period | no text reliably identifies the finished screen |
+| Stable Wait | the matcher succeeds and the host has then been silent for a quiet period | the text appears before the application finishes drawing |
+| Idle Wait | the host has been silent for a quiet period | no text reliably identifies the finished screen |
 
 Prefer the first. Use a stable wait when an application draws a screen title
 first and fills in fields afterward; otherwise your next keystroke can arrive
