@@ -1,5 +1,5 @@
 ---
-title: "Screens and waiting"
+title: "Screens and Waiting"
 description: "How TUICast keeps an emulated terminal screen, why tests wait for screen content instead of sleeping, and when to use stable and idle waits."
 weight: 30
 ---
