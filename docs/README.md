@@ -62,11 +62,17 @@ the page content and remove `draft: true`.
 
 ## Previewing
 
-Install [Hugo](https://gohugo.io/installation/) (extended edition), then run
-from the repository root once `docs/hugo.toml` exists:
+Install [Hugo](https://gohugo.io/installation/) (extended edition, for example
+`brew install hugo`) and [Go](https://go.dev/dl/), which Hugo uses to download
+the theme. Then run from the repository root:
 
 ```sh
 hugo server --source docs --buildDrafts
 ```
 
-`--buildDrafts` includes pages still marked `draft: true`.
+Open http://localhost:1313. `--buildDrafts` includes pages still marked
+`draft: true`; the published site leaves them out. With
+[Task](https://taskfile.dev/) installed, `task docs` runs the same command.
+
+Pushing to `main` publishes the site to https://tuicast.castingcode.dev, and
+each pull request that changes `docs/` gets a preview link in a comment.

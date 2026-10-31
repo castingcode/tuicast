@@ -2,6 +2,8 @@
 title: "TUICast documentation"
 linkTitle: "Documentation"
 description: "TUICast automates and tests interactive terminal applications over SSH and Telnet, with VT220 and xterm emulation and SDKs for Go, Python, TypeScript, and Java."
+cascade:
+  type: docs
 ---
 
 TUICast is an open-source tool for automating and testing interactive terminal

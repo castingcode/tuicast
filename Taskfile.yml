@@ -287,3 +287,16 @@ tasks:
         "{{.PYTHON}}" examples/python/cucumber/report.py
         "{{.ROOT_DIR}}/cucumber-reports/python/cucumber.json"
         "{{.ROOT_DIR}}/cucumber-reports/python/cucumber.html"
+
+  # Documentation site (.github/workflows/docs.yml). Requires Hugo extended
+  # and Go; see docs/README.md.
+
+  docs:
+    desc: Preview the documentation site, including draft pages, at http://localhost:1313
+    cmds:
+      - hugo server --source docs --buildDrafts
+
+  docs:build:
+    desc: Build the documentation site into docs/public, as the Docs workflow does
+    cmds:
+      - hugo --source docs --minify --gc

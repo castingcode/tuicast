@@ -150,29 +150,39 @@ file needs to be kept in sync.
 **Generator: Hugo.** It is a single binary, which suits a Go project and a CI
 pipeline, and needs no Node.js toolchain.
 
-**Theme: Hextra (proposed).** It provides a documentation sidebar ordered by
-`weight`, built-in search, and `llms` and Markdown output formats, without
-requiring Node.js. Docsy is the main alternative and also supports `llms.txt`,
-but it requires Node.js for its PostCSS build and is heavier. Evaluate both
-against a few drafted pages before committing.
+**Theme: Hextra**, imported as a Hugo module pinned in `docs/go.mod`. It
+provides a documentation sidebar ordered by `weight`, built-in search, and
+`llms` and Markdown output formats, without requiring Node.js. Docsy was the
+alternative; it requires Node.js for its PostCSS build. Update the theme with
+`hugo mod get -u github.com/imfing/hextra` from `docs/`.
 
-Configuration to apply when the site is created:
+`docs/hugo.toml` applies these choices:
 
-- `enableRobotsTXT = true` and the built-in sitemap.
-- `enableGitInfo = true`, so each page shows when it was last changed.
-- `baseURL` set to the final domain, so canonical URLs are absolute.
-- The theme's `llms` output on the home page and `markdown` output on pages.
-- `markup.goldmark.renderHooks.link.useEmbedded = 'fallback'` (or `'always'`
-  when the theme provides no link hook), so relative `.md` links resolve to page
-  URLs. Content uses relative file links so pages also read correctly on GitHub.
+- `enableRobotsTXT` and the built-in sitemap.
+- `enableGitInfo`, so each page shows when it was last changed. CI checks out
+  full history for this.
+- `baseURL` set to `https://tuicast.castingcode.dev/`, so canonical URLs are
+  absolute.
+- `llms` output on the home page and `markdown` output on pages and sections.
+  `docs/layouts/llms.txt` overrides the theme's template to use each page's
+  `description`.
+- `markup.goldmark.renderHooks.link.useEmbedded = 'fallback'`, so relative
+  `.md` links resolve to page URLs. Content uses relative file links so pages
+  also read correctly on GitHub.
 - Content in `docs/content/` publishes at the site root, for example
-  `/concepts/screens-and-waiting/`. With Hextra, the root `_index.md` sets
-  `cascade: {type: docs}` to apply the documentation layout to every section.
+  `/concepts/screens-and-waiting/`. The root `_index.md` sets
+  `cascade: {type: docs}` to apply Hextra's documentation layout everywhere.
 
-**Hosting: Azure Static Web Apps.** Build with `hugo --minify --source docs` in
-GitHub Actions and deploy `docs/public` with `Azure/static-web-apps-deploy`.
-Pull requests get preview environments. Treat the deployment workflow as a
-separate change.
+**Hosting: Azure Static Web Apps** (Free plan) at
+`https://tuicast.castingcode.dev`. `.github/workflows/docs.yml` builds with a
+pinned Hugo version and deploys `docs/public` with
+`Azure/static-web-apps-deploy`, authenticating with the
+`AZURE_STATIC_WEB_APPS_API_TOKEN` repository secret. Pushes to `main` publish
+production. Pull requests from this repository get a preview environment,
+removed when the pull request closes; forks are built but not deployed. The
+Free plan allows three preview environments at a time.
+`docs/static/staticwebapp.config.json` sets the 404 page, Markdown MIME type,
+and security headers.
 
 ## Discoverability
 
@@ -206,7 +216,6 @@ specific pages, accurate answers near the top, and consistent terms.
 1. Edit and verify the drafted Getting started and Concepts pages; they decide
    whether readers adopt TUICast.
 2. Edit the drafted Reference pages and the glossary.
-3. Choose the theme, add `docs/hugo.toml`, and preview locally.
-4. Write the briefed pages, starting with When to use TUICast and Use AI agents
+3. Write the briefed pages, starting with When to use TUICast and Use AI agents
    with MCP.
-5. Add the Azure deployment workflow, then point README links at the site.
+4. Once the site is live, point README links at it.
