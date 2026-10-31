@@ -9,9 +9,9 @@ TUICast offers two: `vt220` and `xterm-256color`. The application adapts its
 output to the terminal it believes it is talking to, so the profile must match
 what the application expects.
 
-## Choose a profile
+## Choose a Profile
 
-| Profile | Imitates | Choose it for |
+| Profile | Imitates | Choose it For |
 | --- | --- | --- |
 | `vt220` | DEC VT220 | Legacy and RF warehouse applications; the SDK default |
 | `xterm-256color` | Modern xterm | Applications that use colors beyond the basic eight, an alternate screen, Unicode, or window titles |
@@ -22,7 +22,7 @@ is talking to. To find what your application expects, check how users connect
 today: the terminal type configured in their emulator or RF device is usually
 the right choice.
 
-## Set the screen size
+## Set the Screen Size
 
 Each session has a width and height in characters; the default is 80 columns
 by 24 rows. Many applications lay out screens for a specific size, and RF
@@ -39,7 +39,7 @@ TUICast encodes named keys for the session's profile, so `press(F5)` sends what
 that terminal would send. Your code can also send raw bytes for anything
 unusual. See [Keys](../reference/keys.md).
 
-## Unsupported sequences
+## Unsupported Sequences
 
 No emulator implements every escape sequence. When the application sends one
 TUICast does not support, TUICast ignores it rather than printing garbage, and
