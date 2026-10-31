@@ -19,7 +19,7 @@ connects to, and open no network ports unless you ask.
   screen, is not logged. Recordings store a parameter name instead of the value
   when you mark input as a parameter.
 
-## Host verification
+## Host Verification
 
 An SSH connection must verify the server's identity in exactly one way:
 
@@ -31,7 +31,7 @@ An SSH connection must verify the server's identity in exactly one way:
 Telnet has no encryption or host verification. Use it only on networks you
 trust, typically when the application offers nothing else.
 
-## Captured terminal data
+## Captured Terminal Data
 
 When a wait fails, TUICast keeps the most recent host output, up to 64 KiB, for
 diagnosis. That output can contain anything the application displayed,
@@ -46,7 +46,7 @@ including business or personal data. TUICast:
 Treat test reports that include screens or dumps with the same care as the
 application's data.
 
-## No listening ports by default
+## No Listening Ports by Default
 
 The driver talks to its SDK over standard input and output. It opens a network
 listener only when you enable **Inspector**, its read-only web page. Inspector
@@ -54,7 +54,7 @@ has no authentication or TLS, so bind it to `127.0.0.1`; the driver warns when
 it is bound to any other address. **Workbench**, which can send input, works
 only on loopback addresses and rejects cross-origin requests.
 
-## AI agents
+## AI Agents
 
 The MCP server limits what an agent can reach. An operator defines named
 **profiles** that fix the host, credentials, terminal type, and screen size. An
@@ -66,6 +66,6 @@ Secrets for MCP profiles come from environment variables, files, or a command
 that only the operator can configure. See the
 [MCP server reference](../reference/mcp-server.md#secrets).
 
-## Reporting a vulnerability
+## Reporting a Vulnerability
 
 <!-- WRITER: link the project's security policy (SECURITY.md) once it exists. -->
