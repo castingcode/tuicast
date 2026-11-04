@@ -16,7 +16,7 @@ Think of it as Playwright for terminal applications: your tests describe what a
 user does and sees, and TUICast handles the connection, terminal emulation, and
 timing.
 
-## Start here
+## Start Here
 
 - **New to TUICast?** [Install it](getting-started/installation.md), then
   automate your first login in [Go](getting-started/go.md),
@@ -30,7 +30,7 @@ timing.
 - **A wait timed out?** See [Diagnose failed waits](guides/diagnose-failed-waits.md).
 - **Looking up a flag, key, or method?** Go to the [Reference](reference/).
 
-## What TUICast does
+## What TUICast Does
 
 - Opens many isolated terminal sessions at once, over SSH or Telnet.
 - Maintains an accurate screen for each session, including cursor, colors, and
