@@ -11,7 +11,7 @@ emulator or device uses, and its screen size. This guide uses Go; every SDK
 uses the same option names in its own style, for example `known_hosts_file` in
 Python.
 
-## Connect over SSH
+## Connect Over SSH
 
 Give TUICast the host, a user name, and one way to sign in: a password, a
 private key, or both.
@@ -41,7 +41,7 @@ it, for example `SHA256:uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s`. To get
 it, ask the server's administrator or run
 `ssh-keyscan HOST | ssh-keygen -lf -` from a trusted network.
 
-## Connect over Telnet
+## Connect Over Telnet
 
 Telnet needs only an address. Signing in happens on screen, like a user would:
 
@@ -55,7 +55,7 @@ Then wait for the host's login prompt and type the credentials, as in the
 getting-started guides. Telnet is unencrypted; use it only on networks you
 trust.
 
-## Match the terminal
+## Match the Terminal
 
 Open the session with the terminal type and size your users have:
 
@@ -72,7 +72,7 @@ size first. See [Terminal emulation](../concepts/terminal-emulation.md).
 If the application sends ENQ and expects a particular answerback, such as a
 device identifier, set it with `WithAnswerback`.
 
-## Check the first screen
+## Check the First Screen
 
 Before writing a full test, confirm the connection works:
 
