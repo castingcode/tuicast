@@ -5,8 +5,8 @@ description: "Install the TUICast driver, MCP server, and reference TUI with Hom
 weight: 10
 ---
 
-TUICast has two parts to install: the **driver** binary, which every SDK
-launches, and an **SDK** for your programming language. The driver must be on
+TUICast has two parts to install: the driver binary, which every SDK
+launches, and an SDK for your programming language. The driver must be on
 your `PATH`.
 
 | Component | Binary | Needed for |
@@ -15,7 +15,7 @@ your `PATH`.
 | Reference TUI | `reference-tui` | Tutorials, demos, and trying TUICast |
 | MCP server | `tuicast-mcp` | AI agents only |
 
-## Install the binaries
+## Install the Binaries
 
 Choose one method. Homebrew, WinGet, Scoop, and the Linux packages install all
 three binaries.
@@ -47,7 +47,7 @@ install it with your package manager, for example:
 sudo apt install ./tuicast_VERSION_linux_amd64.deb
 ```
 
-### macOS and Linux: install script
+### macOS and Linux: Install Script
 
 The script installs into `./bin` by default. This command installs every
 binary into `~/.local/bin`:
@@ -61,7 +61,7 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 Use `--component` with `driver` (the default), `mcp`, `reference-tui`, or
 `all`. Add a version, such as `v0.2.1`, as the last argument to pin a release.
 
-### Windows: install script
+### Windows: Install Script
 
 ```powershell
 $install = [scriptblock]::Create((irm `
@@ -97,7 +97,7 @@ Linux images for amd64 and arm64 are published on Docker Hub as
 `castingcode/tuicast-driver` and `castingcode/tuicast-reference-tui`. See
 [Run in containers and CI](../guides/run-in-containers-and-ci.md).
 
-## Check the installation
+## Check the Installation
 
 ```sh
 tuicast-driver -version
