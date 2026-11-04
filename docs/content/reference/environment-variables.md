@@ -30,7 +30,7 @@ An MCP profile names the variables that hold its secrets, using the
 If neither is set, the server runs the `-secret-command` executable, if
 configured. See [Secrets](mcp-server.md#secrets) for the full rules.
 
-## Install scripts
+## Install Scripts
 
 | Variable | Script | Description |
 | --- | --- | --- |
