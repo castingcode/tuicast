@@ -39,7 +39,7 @@ profiles; they cannot supply addresses or credentials.
 }
 ```
 
-### Profile fields
+### Profile Fields
 
 | Field | Required | Description |
 | --- | --- | --- |
@@ -50,7 +50,7 @@ profiles; they cannot supply addresses or credentials.
 | `width`, `height` | yes | Screen size, 1 to 1000 |
 | `ssh` | for SSH | SSH settings; not allowed for Telnet |
 
-### SSH fields
+### SSH Fields
 
 | Field | Description |
 | --- | --- |
