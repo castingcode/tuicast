@@ -70,7 +70,7 @@ Create `pom.xml` with the TUICast dependency from Maven Central:
 </project>
 ```
 
-## Choose credentials
+## Choose Credentials
 
 The reference TUI has no default passwords, so choose your own and keep them
 out of source code, just as you would for a real WMS environment. Store them in
@@ -90,7 +90,7 @@ Load the file into each terminal you use for this guide:
 set -a; . ./.env.local; set +a
 ```
 
-## Start the reference TUI
+## Start the Reference TUI
 
 In a separate terminal, load `.env.local` and start TUICast's deterministic
 demonstration server:
@@ -103,7 +103,7 @@ Both the SSH transport and the application displayed inside the terminal use
 the user ID `operator`. Their passwords are `TUICAST_REFERENCE_PASSWORD` and
 `TUICAST_REFERENCE_APP_PASSWORD`, respectively.
 
-## Automate a login
+## Automate a Login
 
 Create `src/main/java/Quickstart.java`:
 
@@ -169,7 +169,7 @@ trusted host-key option: `knownHostsFile(...)` or `hostKeyFingerprint(...)`.
 As in this example, keep application and SSH credentials in environment
 variables or a secret manager rather than in source code.
 
-## Next steps
+## Next Steps
 
 - [Screens and waiting](../concepts/screens-and-waiting.md) explains how a wait
   decides that the application is ready.
