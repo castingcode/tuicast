@@ -5,9 +5,9 @@ This folder holds the source for the TUICast documentation site. Pages live in
 and discoverability rules are in
 [`design/documentation.md`](../design/documentation.md).
 
-## Where a page belongs
+## Where a Page Belongs
 
-| If the page... | Put it in |
+| If the Page... | Put It In |
 | --- | --- |
 | walks a newcomer through a first success | `getting-started/` |
 | explains how or why something works | `concepts/` |
@@ -16,7 +16,7 @@ and discoverability rules are in
 
 If a page needs two of these, split it and link between the pages.
 
-## Front matter
+## Front Matter
 
 Every page starts with:
 
@@ -39,7 +39,7 @@ weight: 30
 Pages that say **Writer brief** describe what to write. Replace the brief with
 the page content and remove `draft: true`.
 
-## Writing rules
+## Writing Rules
 
 - **Answer in the first two sentences.** Name TUICast and the subject. A
   reader, search engine, or AI tool should be able to stop there.
