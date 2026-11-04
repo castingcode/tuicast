@@ -58,7 +58,7 @@ Without an address flag, the reference TUI runs in the current terminal.
 | `-app-username NAME` | `operator` | User ID accepted by the application's login screen. At most 24 characters. |
 | `-app-password PASSWORD` | `$TUICAST_REFERENCE_APP_PASSWORD` | Password accepted by the login screen. At most 24 characters. Prefer the environment variable. |
 
-## Install scripts
+## Install Scripts
 
 `install.sh` (macOS and Linux) and `install.ps1` (Windows) download a release
 from GitHub.
