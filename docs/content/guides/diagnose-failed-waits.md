@@ -9,12 +9,12 @@ expected or showed it in a way TUICast did not interpret correctly. TUICast
 gives you three pieces of evidence to tell which: the last screen, a
 flight-recorder dump, and unsupported-sequence events.
 
-## 1. Read the last screen
+## 1. Read the Last Screen
 
-Every SDK raises a **wait error** that includes what the wait expected and the
+Every SDK raises a wait error that includes what the wait expected and the
 last screen TUICast saw. Print or attach that screen to your test report.
 
-| What you see | Likely cause | Fix |
+| What You See | Likely Cause | Fix |
 | --- | --- | --- |
 | A different screen, such as an error message | The application behaved differently | Check test data and the preceding steps |
 | The expected screen, but slightly different text | The matcher is too strict | Match a shorter or more stable piece of text |
@@ -24,10 +24,10 @@ last screen TUICast saw. Print or attach that screen to your test report.
 The wait error's text ends with the last screen, so test frameworks usually
 show it without extra code.
 
-## 2. Save the flight-recorder dump
+## 2. Save the Flight-recorder Dump
 
 Each session keeps the most recent host output, up to 64 KiB, exactly as
-received. A failed wait includes it as a **dump** in the wait error's `dump`
+received. A failed wait includes it as a dump in the wait error's `dump`
 field: the bytes, when each read arrived, which screen revision it produced,
 and which sequences TUICast ignored.
 
@@ -45,7 +45,7 @@ in Go. The wait error's `dumpPath` field then names the file.
 Dumps contain whatever the application displayed. Store them as carefully as
 the application's data.
 
-## 3. Check unsupported sequences
+## 3. Check Unsupported Sequences
 
 If the screen looks wrong, TUICast may have ignored a sequence the application
 relies on. Subscribe to the session's events, or read the dump, and look for
@@ -60,7 +60,7 @@ If you believe TUICast handles a sequence incorrectly,
 [open an issue](https://github.com/castingcode/tuicast/issues) and attach the
 dump.
 
-## 4. Watch the session live
+## 4. Watch the Session Live
 
 To watch a session while a test runs, start the driver with the Inspector:
 
@@ -71,15 +71,15 @@ tuicast-driver -ui-address 127.0.0.1:0
 The driver logs the Inspector's URL to standard error. Its session page shows
 the live screen and the unsupported sequences received so far.
 
-## Common causes
+## Common Causes
 
-- **Timeout too short for a slow step.** Long-running operations, such as
+- **Timeout Too Short for a Slow Step.** Long-running operations, such as
   allocating a wave, need a longer timeout on that wait only.
-- **Typing before the screen is ready.** Use a
+- **Typing Before the Screen is Ready.** Use a
   [stable wait](../concepts/screens-and-waiting.md#three-kinds-of-wait) on the
   screen before the input.
-- **Wrong terminal size.** The application wrapped or truncated text
+- **Wrong Terminal Size.** The application wrapped or truncated text
   differently. See [Terminal emulation](../concepts/terminal-emulation.md).
-- **Text split across lines.** A `contains` matcher checks the screen's text
+- **Text Split Across Lines.** A `contains` matcher checks the screen's text
   with a line break between rows, so text that wraps onto the next row does
   not match as one string.
