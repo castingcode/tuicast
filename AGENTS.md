@@ -53,6 +53,8 @@ updated, so do not assume unlisted documents are irrelevant.
   lifecycle behavior
 - `design/terminal-behavior.md` — terminal contract and supported VT220/xterm
   behavior
+- `design/documentation.md` — user documentation structure, page inventory,
+  and site tooling; writing conventions are in `docs/README.md`
 
 Keep implementation and documentation consistent. When behavior or an
 architectural contract changes, update the corresponding document as part of

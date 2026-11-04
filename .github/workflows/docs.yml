@@ -1,0 +1,88 @@
+name: Docs
+
+# Builds the Hugo site in docs/ and deploys it to Azure Static Web Apps:
+# pushes to main publish https://tuicast.castingcode.dev, and pull requests get
+# a preview environment that is removed when the pull request closes.
+# See design/documentation.md.
+
+on:
+  push:
+    branches: [main]
+    paths: [docs/**, .github/workflows/docs.yml]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [main]
+    paths: [docs/**, .github/workflows/docs.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write # The deploy action comments the preview URL.
+
+concurrency:
+  group: docs-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  HUGO_VERSION: 0.169.0
+  # Forks cannot read the deployment token, so their pull requests are built
+  # but not deployed.
+  CAN_DEPLOY: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Git history supplies each page's last-updated date.
+
+      - name: Set up Go for Hugo modules
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: docs/go.mod
+          cache-dependency-path: docs/go.sum
+
+      - name: Install Hugo
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/hugo.tar.gz" \
+            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz"
+          tar -xzf "$RUNNER_TEMP/hugo.tar.gz" -C "$RUNNER_TEMP" hugo
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      # Previews keep the production baseURL: page links are root-relative, so
+      # navigation stays on the preview host, while canonical links point
+      # search engines at production.
+      - name: Build site
+        run: hugo --source docs --minify --gc
+
+      - name: Deploy to Azure Static Web Apps
+        if: env.CAN_DEPLOY == 'true'
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          # Only main publishes production; any other branch, including a
+          # manual run from a branch, deploys to a preview environment.
+          production_branch: main
+          app_location: docs/public
+          output_location: ""
+          skip_app_build: true
+          skip_api_build: true
+
+  close-preview:
+    name: Remove preview
+    if: >-
+      github.event_name == 'pull_request' && github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close preview environment
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: close
