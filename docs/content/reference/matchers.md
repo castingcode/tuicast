@@ -36,7 +36,7 @@ so *contains* text cannot span two rows unless it includes the line break.
 Each SDK also has a `waitForText` shortcut (`WaitForText` in Go,
 `wait_for_text` in Python) equivalent to waiting for *contains*.
 
-## JSON form
+## JSON Form
 
 The driver's `session.wait` method and the MCP `tuicast_wait` tool take
 matchers as JSON. Each object has exactly one key, and expressions can be
@@ -61,7 +61,7 @@ nested up to 64 levels:
 | `any` | array of matchers |
 | `not` | matcher |
 
-## Wait options
+## Wait Options
 
 | Option | Effect |
 | --- | --- |
