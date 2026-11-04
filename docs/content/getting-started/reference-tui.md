@@ -11,7 +11,7 @@ function keys, colors, and slow operations, and it always behaves the same way,
 which makes it suitable for tutorials, demos, and tests. Use it to learn
 TUICast before connecting to your own application.
 
-## Set passwords
+## Set Passwords
 
 The reference TUI has no default passwords, just as a real system should not.
 Choose two and export them:
@@ -36,7 +36,7 @@ ignores, set the passwords there, and load both files:
 set -a; . ./.env; . ./.env.local; set +a
 ```
 
-## Run it
+## Run It
 
 Run it in your terminal to see what you will automate:
 
