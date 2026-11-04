@@ -33,7 +33,7 @@ Everything in `vt220`, plus:
 - Wide (East Asian) and combining Unicode characters
 - Window titles (`OSC 0` and `OSC 2`)
 
-## Ignored on purpose
+## Ignored on Purpose
 
 These sequences affect only input TUICast never sends or state a screen
 snapshot does not represent. They are ignored without an unsupported-sequence
@@ -46,7 +46,7 @@ report:
 - Icon name (`OSC 1`)
 - Unused C0 controls such as NUL padding
 
-## Not supported
+## Not Supported
 
 Everything else is ignored and reported as an unsupported sequence. Notable
 gaps:
