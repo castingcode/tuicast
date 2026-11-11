@@ -65,7 +65,3 @@ is required unless the operator explicitly disables it, which logs a warning.
 Secrets for MCP profiles come from environment variables, files, or a command
 that only the operator can configure. See the
 [MCP server reference](../reference/mcp-server.md#secrets).
-
-## Reporting a Vulnerability
-
-<!-- WRITER: link the project's security policy (SECURITY.md) once it exists. -->
