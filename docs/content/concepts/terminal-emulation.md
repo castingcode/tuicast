@@ -57,4 +57,4 @@ Some control characters do not change the screen:
 - **BELL** makes a real terminal beep. Warehouse and RF applications often beep
   on errors, so TUICast reports each bell as an event your test can check.
 - **ENQ** asks the terminal to identify itself. TUICast replies with the
-  session's configured **answerback** text, as a physical terminal would.
+  session's configured answerback text, as a physical terminal would.
