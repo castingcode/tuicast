@@ -4,7 +4,7 @@ description: "What TUICast's VT220 and xterm-256color terminal profiles are, how
 weight: 40
 ---
 
-A **terminal profile** tells TUICast which kind of terminal to imitate.
+A terminal profile tells TUICast which kind of terminal to imitate.
 TUICast offers two: `vt220` and `xterm-256color`. The application adapts its
 output to the terminal it believes it is talking to, so the profile must match
 what the application expects.
