@@ -7,10 +7,10 @@ draft: true
 
 ## Writer brief
 
-**Reader question:** "I already know expect, pexpect, or our RPA tool. Why
+**Reader Question:** "I already know expect, pexpect, or our RPA tool. Why
 would I use TUICast, and when should I not?"
 
-**Why it matters:** Comparison questions are among the most common searches
+**Why it Matters:** Comparison questions are among the most common searches
 and AI prompts during tool evaluation. A fair, factual page is often the one
 an AI engine quotes.
 
@@ -29,11 +29,11 @@ an AI engine quotes.
   SSH library is enough), and GUI applications.
 - One sentence on the Playwright analogy and where it holds.
 
-**Sources:** [How TUICast works](how-tuicast-works.md),
-[Screens and waiting](screens-and-waiting.md), each tool's official
+**Sources:** [How TUICast Works](how-tuicast-works.md),
+[Screens and Waiting](screens-and-waiting.md), each tool's official
 documentation. Cite sources for every claim about another tool and keep the
 tone neutral.
 
-**Out of scope:** benchmarks and feature promises.
+**Out of Scope:** benchmarks and feature promises.
 
 **Length:** about 600 words, mostly the table.
