@@ -4,10 +4,7 @@ description: "How TUICast connections and terminal sessions relate, how SSH and 
 weight: 20
 ---
 
-In TUICast, a **connection** is one network link to a host, and a **session**
-is one interactive terminal on that connection, equivalent to one user at one
-terminal. You open a connection, open one or more sessions on it, and interact
-with each session independently.
+A connection is a single network link to a host. Sessions are interactive terminals on a connection that equate to one user per terminal. TUICast users can open a connection with multiple sessions and interact with each independently.
 
 ```text
 Driver
