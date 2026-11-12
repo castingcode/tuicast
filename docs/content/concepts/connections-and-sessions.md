@@ -40,11 +40,11 @@ A session ends when:
 
 ## Closing Releases Everything Below
 
-Closing is safe to repeat and works top-down:
+Closing works top-down:
 
-- closing a session releases its terminal;
-- closing a connection closes its sessions;
-- closing the driver closes every connection.
+- closing the driver closes every connection
+- closing a connection closes its sessions
+- closing a session releases its terminal
 
 Always close the driver when your program finishes, even after a failure. Each
 SDK provides an idiomatic way to do this, such as `defer` in Go or `with` in
