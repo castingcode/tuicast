@@ -1,4 +1,9 @@
-# Getting started with TUICast for Python
+---
+title: "Get started with Python"
+linkTitle: "Python"
+description: "Install the TUICast Python SDK and write a Python script that logs in to a terminal application over SSH and checks the resulting screen."
+weight: 40
+---
 
 TUICast lets Python programs control interactive terminal applications over
 SSH or Telnet. The Python SDK launches `tuicast-driver`, which owns the network
@@ -18,8 +23,8 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-See the [main installation instructions](../README.md#driver-and-other-binaries---using-the-install-script)
-for Windows and other installation options.
+See [Installation](installation.md) for Windows, package managers, and other
+options.
 
 ## Install the SDK
 
@@ -34,7 +39,7 @@ source .venv/bin/activate
 python -m pip install tuicast==0.0.1
 ```
 
-## Choose credentials
+## Choose Credentials
 
 The reference TUI has no default passwords, so choose your own and keep them
 out of source code, just as you would for a real WMS environment. Store them in
@@ -54,7 +59,7 @@ Load the file into each terminal you use for this guide:
 set -a; . ./.env.local; set +a
 ```
 
-## Start the reference TUI
+## Start the Reference TUI
 
 In a separate terminal, load `.env.local` and start TUICast's deterministic
 demonstration server:
@@ -67,7 +72,7 @@ Both the SSH transport and the application displayed inside the terminal use
 the user ID `operator`. Their passwords are `TUICAST_REFERENCE_PASSWORD` and
 `TUICAST_REFERENCE_APP_PASSWORD`, respectively.
 
-## Automate a login
+## Automate a Login
 
 Create `quickstart.py`:
 
@@ -116,3 +121,12 @@ For a real SSH server, replace `insecure_skip_host_key_check=True` with exactly
 one trusted host-key option: `known_hosts_file` or `host_key_fingerprint`. As in
 this example, keep application and SSH credentials in environment variables or
 a secret manager rather than in source code.
+
+## Next Steps
+
+- [Screens and waiting](../concepts/screens-and-waiting.md) explains how a wait
+  decides that the application is ready.
+- [Connect to your application](../guides/connect-to-your-application.md)
+  replaces the reference TUI with your own SSH or Telnet host.
+- The [Python examples](https://github.com/castingcode/tuicast/tree/main/examples/python)
+  cover forms, tables, resizing, concurrent sessions, and Cucumber.

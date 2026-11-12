@@ -1,0 +1,34 @@
+{{- /* Overrides Hextra's llms.txt to use each page's front matter description,
+which is written for this purpose, instead of a truncated summary. */ -}}
+# {{ .Site.Title }}
+
+> {{ .Site.Params.description }}
+
+{{ range where site.Sections "Params.llms" "ne" false }}
+{{- template "llms-section-tree" dict "context" . "level" 2 }}
+{{ end }}
+
+{{- $rootPages := where (where site.RegularPages "Section" "") "Params.llms" "ne" false }}
+{{- if $rootPages }}
+## More
+{{- range $rootPages }}
+{{ template "llms-entry" . }}
+{{- end }}
+{{- end }}
+
+{{- define "llms-entry" -}}
+- [{{ .Title }}]({{ .Permalink }}): {{ .Description | default (.Summary | plainify | truncate 160) | strings.TrimSpace }}
+{{- end -}}
+
+{{- define "llms-section-tree" -}}
+{{- $context := .context -}}
+{{- $level := .level | default 2 -}}
+{{- "\n" -}}
+{{ strings.Repeat $level "#" }} {{ $context.Title }}
+{{- range where $context.RegularPages "Params.llms" "ne" false }}
+{{ template "llms-entry" . }}
+{{- end }}
+{{- range where $context.Sections "Params.llms" "ne" false }}
+{{ template "llms-section-tree" dict "context" . "level" (add $level 1) }}
+{{- end }}
+{{- end -}}
