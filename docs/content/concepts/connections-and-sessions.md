@@ -32,14 +32,11 @@ Sessions run independently of each other, allowing multiple simulations to run a
 
 A session ends when:
 
-- the application closes it, for example after the user signs out;
-- the connection fails; or
-- your code closes it.
+- the connection fails
+- the code closes it
+- the application closes it
+    -In the scenario that the application ends a session, the final screen remains and cannot be edited until the user closes the session.  
 
-When the application ends a session, TUICast treats that as a normal outcome,
-not an error. The final screen stays readable until you close the session, so a
-test can check a sign-out message. Sending input to an ended session fails.
-Your code can wait for a session to end, which is useful for testing sign-out.
 
 ## Closing Releases Everything Below
 
