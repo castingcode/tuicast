@@ -20,13 +20,9 @@ Driver
 | Authentication | Once per connection, by TUICast | On screen, by your code typing at the host's login prompt |
 | Encryption | Yes | No |
 
-Several SSH sessions can share one connection and its sign-in. SSH servers
-usually limit how many; OpenSSH allows 10 by default (`MaxSessions`). To run
-more sessions, open more connections. See
-[Run sessions concurrently](../guides/run-sessions-concurrently.md).
+Multiple SSH sessions can share a single connection and sign-in, opening more connections creates more sessions ([Run sessions concurrently](https://github.com/castingcode/tuicast/blob/draft-docs/docs/content/guides/run-sessions-concurrently.md)). OpenSSH allows up to 10 by default, but this can be changed if desired (sshd_config -> MaxSessions). 
 
-A Telnet connection carries exactly one session, so each simulated user needs
-its own connection.
+Telnet differs as only a single session can be in a connection, one session per connection.
 
 ## Each Session is Isolated
 
