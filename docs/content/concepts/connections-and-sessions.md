@@ -26,9 +26,7 @@ Telnet differs as only a single session can be in a connection, one session per 
 
 ## Each Session is Isolated
 
-Each session has its own screen, cursor, terminal type, and size. Typing into
-one session never affects another, and waits on different sessions run
-independently. This is what lets one test drive many simulated users at once.
+Sessions run independently of each other, allowing multiple simulations to run at once. Each session has its own screen, cursor, terminal type and size. 
 
 ## How Sessions End
 
