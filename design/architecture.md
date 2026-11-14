@@ -33,7 +33,7 @@ new protocols or terminal types be added without rewriting the session model.
 
 The root package remains the embeddable Go API. The `driver` package exposes
 that API as JSON-RPC 2.0 over streams, while `cmd/tuicast-driver` composes the
-concrete SSH, Telnet, VT220, and xterm implementations. This preserves the core
+concrete SSH, Telnet, PTY, VT220, and xterm implementations. This preserves the core
 dependency direction: the driver depends on the domain and adapters, but the
 domain does not depend on the driver or a delivery protocol.
 

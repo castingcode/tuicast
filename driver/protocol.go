@@ -85,18 +85,24 @@ func decodeParams(data json.RawMessage, destination any) *responseError {
 
 // ConnectionOptions describes a transport connection requested through the
 // driver. SSH host-key verification must use either KnownHostsFile,
-// HostKeyFingerprint, or the explicit insecure option.
+// HostKeyFingerprint, or the explicit insecure option. PTY connections use
+// Command and its related fields instead of Address.
 type ConnectionOptions struct {
-	Protocol                   string `json:"protocol"`
-	Address                    string `json:"address"`
-	Username                   string `json:"username,omitempty"`
-	Password                   string `json:"password,omitempty"`
-	PrivateKey                 string `json:"privateKey,omitempty"`
-	PrivateKeyPassphrase       string `json:"privateKeyPassphrase,omitempty"`
-	KnownHostsFile             string `json:"knownHostsFile,omitempty"`
-	HostKeyFingerprint         string `json:"hostKeyFingerprint,omitempty"`
-	InsecureSkipHostKeyCheck   bool   `json:"insecureSkipHostKeyCheck,omitempty"`
-	ConnectTimeoutMilliseconds int64  `json:"connectTimeoutMilliseconds,omitempty"`
+	Protocol                   string            `json:"protocol"`
+	Address                    string            `json:"address"`
+	Command                    string            `json:"command,omitempty"`
+	Arguments                  []string          `json:"arguments,omitempty"`
+	WorkingDirectory           string            `json:"workingDirectory,omitempty"`
+	Environment                map[string]string `json:"environment,omitempty"`
+	ClearEnvironment           bool              `json:"clearEnvironment,omitempty"`
+	Username                   string            `json:"username,omitempty"`
+	Password                   string            `json:"password,omitempty"`
+	PrivateKey                 string            `json:"privateKey,omitempty"`
+	PrivateKeyPassphrase       string            `json:"privateKeyPassphrase,omitempty"`
+	KnownHostsFile             string            `json:"knownHostsFile,omitempty"`
+	HostKeyFingerprint         string            `json:"hostKeyFingerprint,omitempty"`
+	InsecureSkipHostKeyCheck   bool              `json:"insecureSkipHostKeyCheck,omitempty"`
+	ConnectTimeoutMilliseconds int64             `json:"connectTimeoutMilliseconds,omitempty"`
 }
 
 // Matcher describes a serializable screen expectation. Exactly one field must

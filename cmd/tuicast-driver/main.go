@@ -9,12 +9,14 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/castingcode/tuicast"
 	"github.com/castingcode/tuicast/driver"
 	"github.com/castingcode/tuicast/driverui"
+	"github.com/castingcode/tuicast/pty"
 	tuicastssh "github.com/castingcode/tuicast/ssh"
 	"github.com/castingcode/tuicast/telnet"
 	"github.com/castingcode/tuicast/vt220"
@@ -143,16 +145,61 @@ func isLoopbackAddress(address string) bool {
 func connector(options driver.ConnectionOptions) (tuicast.Connector, error) {
 	switch options.Protocol {
 	case "telnet":
+		if err := rejectPTYOptions(options); err != nil {
+			return nil, fmt.Errorf("creating Telnet connector: %w", err)
+		}
 		opened, err := telnet.NewConnector(telnet.Config{Address: options.Address})
 		if err != nil {
 			return nil, fmt.Errorf("creating Telnet connector: %w", err)
 		}
 		return opened, nil
 	case "ssh":
+		if err := rejectPTYOptions(options); err != nil {
+			return nil, fmt.Errorf("creating SSH connector: %w", err)
+		}
 		return sshConnector(options)
+	case "pty":
+		return ptyConnector(options)
 	default:
 		return nil, fmt.Errorf("creating connector: unsupported protocol %q", options.Protocol)
 	}
+}
+
+func rejectPTYOptions(options driver.ConnectionOptions) error {
+	if options.Command != "" || len(options.Arguments) > 0 || options.WorkingDirectory != "" ||
+		len(options.Environment) > 0 || options.ClearEnvironment {
+		return fmt.Errorf("command, arguments, workingDirectory, environment, and clearEnvironment are valid only for pty")
+	}
+	return nil
+}
+
+func ptyConnector(options driver.ConnectionOptions) (tuicast.Connector, error) {
+	if options.Address != "" {
+		return nil, fmt.Errorf("creating PTY connector: address is not valid for pty; use command")
+	}
+	if options.Username != "" || options.Password != "" || options.PrivateKey != "" || options.PrivateKeyPassphrase != "" ||
+		options.KnownHostsFile != "" || options.HostKeyFingerprint != "" || options.InsecureSkipHostKeyCheck {
+		return nil, fmt.Errorf("creating PTY connector: SSH options are not valid for pty")
+	}
+	environment := make([]string, 0, len(options.Environment))
+	for name, value := range options.Environment {
+		if name == "" || strings.Contains(name, "=") {
+			return nil, fmt.Errorf("creating PTY connector: environment variable name %q is invalid", name)
+		}
+		environment = append(environment, name+"="+value)
+	}
+	sort.Strings(environment)
+	opened, err := pty.NewConnector(pty.Config{
+		Command:  options.Command,
+		Args:     options.Arguments,
+		Dir:      options.WorkingDirectory,
+		Env:      environment,
+		ClearEnv: options.ClearEnvironment,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating PTY connector: %w", err)
+	}
+	return opened, nil
 }
 
 func sshConnector(options driver.ConnectionOptions) (tuicast.Connector, error) {

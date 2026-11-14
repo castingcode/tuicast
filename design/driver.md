@@ -6,7 +6,7 @@ one driver process per test worker and map its native API onto these methods.
 
 The driver and Go library remain in the same module. The `driver` package owns
 the protocol and object registry; `cmd/tuicast-driver` is the composition root
-for SSH, Telnet, VT220, and xterm implementations.
+for SSH, Telnet, PTY, VT220, and xterm implementations.
 
 The machine-readable OpenRPC description is available at
 [`schema/openrpc.json`](../schema/openrpc.json). It uses named parameters, as
@@ -60,7 +60,7 @@ sessions, and connections.
 | --- | --- |
 | `driver.ping` | Return the driver protocol version. |
 | `driver.shutdown` | Close the object graph and stop the process. |
-| `connection.open` | Open an SSH or Telnet connection. |
+| `connection.open` | Open an SSH, Telnet, or PTY connection. |
 | `connection.close` | Close a connection and all of its sessions. |
 | `session.open` | Open a terminal session on a connection. |
 | `session.close` | Close one session. |
@@ -104,6 +104,44 @@ verification requires exactly one of:
 
 Passwords, keys, and passphrases are accepted only in requests and are never
 included in lifecycle logs or responses.
+
+PTY runs a program on a pseudo-terminal on the driver's machine instead of
+connecting to a server, so local terminal applications can be tested without
+a network service. It requires `command` and accepts `arguments`,
+`workingDirectory`, `environment` (an object of variable names and values), and
+`clearEnvironment`. It rejects `address` and SSH options:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "connection.open",
+  "params": {
+    "protocol": "pty",
+    "command": "/opt/wms/bin/rf-client",
+    "arguments": ["--warehouse", "DC1"],
+    "environment": {"WMS_ENV": "test"}
+  }
+}
+```
+
+A command without a path separator is looked up on the driver's `PATH`; a
+relative path is resolved from `workingDirectory`. Each `session.open` on the
+connection starts a new instance of the program, with `TERM` set to the
+session's terminal profile and the PTY sized to the session. The program
+inherits the driver's environment, without `TERM`, `LINES`, and `COLUMNS`,
+unless `clearEnvironment` is true. `environment` cannot set `TERM`.
+
+The session ends when the program exits. A non-zero exit status is reported as
+the session's `error`, such as `running /opt/wms/bin/rf-client: exit status 3`.
+Closing the session or connection hangs up the program and kills it if it is
+still running a second later. The Inspector shows the command as the
+connection's address, never its arguments or environment, because they may
+contain secrets. PTY is supported when the driver runs on Linux or macOS.
+
+The program runs wherever the driver runs: on the test machine, or inside the
+driver's container. A caller that can start the driver can already run
+programs as the driver's user, so `command` grants no additional access.
 
 ### Sessions and input
 

@@ -46,12 +46,17 @@
     },
     {
       "name": "connection.open",
-      "summary": "Open an SSH or Telnet connection",
-      "description": "SSH requires username, at least one authentication option, and exactly one host-key verification option. Secrets are never returned or logged.",
+      "summary": "Open an SSH, Telnet, or PTY connection",
+      "description": "SSH and Telnet require address. SSH also requires username, at least one authentication option, and exactly one host-key verification option. PTY requires command and accepts no address or SSH options; each session on a PTY connection starts its own instance of the program. Secrets are never returned or logged.",
       "paramStructure": "by-name",
       "params": [
         { "$ref": "#/components/contentDescriptors/protocol" },
         { "$ref": "#/components/contentDescriptors/address" },
+        { "$ref": "#/components/contentDescriptors/command" },
+        { "$ref": "#/components/contentDescriptors/arguments" },
+        { "$ref": "#/components/contentDescriptors/workingDirectory" },
+        { "$ref": "#/components/contentDescriptors/environment" },
+        { "$ref": "#/components/contentDescriptors/clearEnvironment" },
         { "$ref": "#/components/contentDescriptors/username" },
         { "$ref": "#/components/contentDescriptors/password" },
         { "$ref": "#/components/contentDescriptors/privateKey" },
@@ -266,13 +271,37 @@
       "protocol": {
         "name": "protocol",
         "required": true,
-        "schema": { "type": "string", "enum": ["ssh", "telnet"] }
+        "schema": { "type": "string", "enum": ["ssh", "telnet", "pty"] }
       },
       "address": {
         "name": "address",
-        "description": "Remote host and port, such as wms.example.test:23.",
-        "required": true,
+        "description": "Remote host and port, such as wms.example.test:23. Required for SSH and Telnet; not valid for PTY.",
         "schema": { "type": "string", "minLength": 1 }
+      },
+      "command": {
+        "name": "command",
+        "description": "Program to run on a driver-local pseudo-terminal. Required for PTY. A name without a path separator is looked up on the driver's PATH; a relative path is resolved from workingDirectory.",
+        "schema": { "type": "string", "minLength": 1 }
+      },
+      "arguments": {
+        "name": "arguments",
+        "description": "PTY program arguments, excluding the program name.",
+        "schema": { "type": "array", "items": { "type": "string" } }
+      },
+      "workingDirectory": {
+        "name": "workingDirectory",
+        "description": "PTY program working directory. Omission uses the driver's working directory.",
+        "schema": { "type": "string" }
+      },
+      "environment": {
+        "name": "environment",
+        "description": "Variables added to the PTY program's environment. TERM cannot be set; it is always the session's terminal profile.",
+        "schema": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "clearEnvironment": {
+        "name": "clearEnvironment",
+        "description": "Start the PTY program with only environment and TERM instead of inheriting the driver's environment. The inherited environment never includes TERM, LINES, or COLUMNS.",
+        "schema": { "type": "boolean", "default": false }
       },
       "username": {
         "name": "username",

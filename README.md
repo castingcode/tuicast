@@ -64,7 +64,8 @@ for each connection. For SSH connections, it authenticates using the password or
 private key you supply and verifies the server's host key.
 
 The driver exposes a JSON-RPC protocol that your application will use to:
-- Open SSH and Telnet connections and terminal sessions.
+- Open SSH and Telnet connections and terminal sessions, or run local
+  terminal programs on a pseudo-terminal (Linux and macOS).
 - Send text, named keystrokes, and raw bytes, including escape sequences,
   to the TUI applications.
 - Read the current screen, wait for expected screen content or for output
