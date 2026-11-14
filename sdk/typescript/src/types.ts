@@ -144,7 +144,24 @@ export interface SSHConfig {
   insecureSkipHostKeyCheck?: boolean;
   timeout?: number;
 }
-export type ConnectionConfig = TelnetConfig | SSHConfig;
+/**
+ * Runs a program on a pseudo-terminal on the driver's machine. Each session
+ * opened on the connection starts its own instance of the program, with
+ * `TERM` set to the session's terminal profile. A command without a path
+ * separator is looked up on the driver's `PATH`; a relative path is resolved
+ * from `workingDirectory`. The program inherits the driver's environment plus
+ * `environment` unless `clearEnvironment` is true. `TERM` cannot be set.
+ */
+export interface PTYConfig {
+  protocol: "pty";
+  command: string;
+  arguments?: readonly string[];
+  workingDirectory?: string;
+  environment?: Readonly<Record<string, string>>;
+  clearEnvironment?: boolean;
+  timeout?: number;
+}
+export type ConnectionConfig = TelnetConfig | SSHConfig | PTYConfig;
 export interface SessionOptions {
   terminal?: TerminalProfile;
   width?: number;

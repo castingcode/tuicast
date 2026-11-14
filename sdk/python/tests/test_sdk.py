@@ -74,6 +74,28 @@ def test_configs_validation_matchers_and_timeout(driver):
         "host", "user", private_key="key", host_key_fingerprint="SHA256:x"
     ).params(1)
     assert params["protocol"] == "ssh"
+    with pytest.raises(ValueError):
+        tuicast.PTY("").params(1)
+    with pytest.raises(TypeError):
+        tuicast.PTY("rf-client", arguments="--warehouse DC1").params(1)
+    params, timeout = tuicast.PTY(
+        "rf-client",
+        arguments=("--warehouse", "DC1"),
+        working_directory="/opt/wms",
+        environment={"WMS_ENV": "test"},
+        clear_environment=True,
+        timeout=2,
+    ).params(1)
+    assert timeout == 2
+    assert params == {
+        "protocol": "pty",
+        "command": "rf-client",
+        "arguments": ["--warehouse", "DC1"],
+        "workingDirectory": "/opt/wms",
+        "environment": {"WMS_ENV": "test"},
+        "clearEnvironment": True,
+        "connectTimeoutMilliseconds": 2000,
+    }
     with pytest.raises(tuicast.RPCTimeoutError):
         driver._call("hang", timeout=0.01)
     with pytest.raises(TypeError):

@@ -6,7 +6,7 @@ import os
 import queue
 import subprocess
 import threading
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, BinaryIO, Generic, Literal, TextIO, TypeVar, overload
 
@@ -124,6 +124,42 @@ class SSH:
             "knownHostsFile": self.known_hosts_file,
             "hostKeyFingerprint": self.host_key_fingerprint,
             "insecureSkipHostKeyCheck": self.insecure_skip_host_key_check,
+            "connectTimeoutMilliseconds": _milliseconds(timeout),
+        }, timeout
+
+
+@dataclass(frozen=True, slots=True)
+class PTY:
+    """Run a program on a pseudo-terminal on the driver's machine.
+
+    Each session opened on the connection starts its own instance of the
+    program, with ``TERM`` set to the session's terminal profile. A command
+    without a path separator is looked up on the driver's ``PATH``; a
+    relative path is resolved from ``working_directory``. The program
+    inherits the driver's environment plus ``environment`` unless
+    ``clear_environment`` is true. ``TERM`` cannot be set.
+    """
+
+    command: str
+    arguments: Sequence[str] = ()
+    working_directory: str = ""
+    environment: Mapping[str, str] | None = None
+    clear_environment: bool = False
+    timeout: float | None = None
+
+    def params(self, default_timeout: float) -> tuple[dict[str, Any], float]:
+        if not self.command:
+            raise ValueError("configuring PTY connection: command is required")
+        if isinstance(self.arguments, str):
+            raise TypeError("configuring PTY connection: arguments must be a sequence of strings")
+        timeout = _positive(self.timeout or default_timeout, "connection timeout")
+        return {
+            "protocol": "pty",
+            "command": self.command,
+            "arguments": list(self.arguments),
+            "workingDirectory": self.working_directory,
+            "environment": dict(self.environment or {}),
+            "clearEnvironment": self.clear_environment,
             "connectTimeoutMilliseconds": _milliseconds(timeout),
         }, timeout
 
@@ -277,9 +313,9 @@ class Driver:
             raise ProtocolError(f"calling {method}: response has no result or error")
         return reply["result"]
 
-    def connect(self, config: Telnet | SSH) -> Connection:
-        if not isinstance(config, (Telnet, SSH)):
-            raise TypeError("connection configuration must be SSH or Telnet")
+    def connect(self, config: Telnet | SSH | PTY) -> Connection:
+        if not isinstance(config, (Telnet, SSH, PTY)):
+            raise TypeError("connection configuration must be SSH, Telnet, or PTY")
         params, timeout = config.params(self.default_timeout)
         result = self._call("connection.open", params, timeout=timeout + 1)
         return Connection(self, int(result["connectionId"]))

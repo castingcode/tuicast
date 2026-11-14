@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { createInterface } from "node:readline";
 const cell = (text) => ({
   text,
@@ -37,6 +38,24 @@ rl.on("line", (line) => {
       send(r);
       process.exit();
     case "connection.open":
+      if (q.params.protocol === "pty") {
+        const expected = {
+          protocol: "pty",
+          command: "rf-client",
+          arguments: ["--warehouse", "DC1"],
+          environment: { WMS_ENV: "test" },
+          connectTimeoutMilliseconds: 2000,
+        };
+        if (!isDeepStrictEqual(q.params, expected)) {
+          r.error = {
+            code: -32602,
+            message: "unexpected pty parameters " + JSON.stringify(q.params),
+          };
+          break;
+        }
+        r.result = { connectionId: 12 };
+        break;
+      }
       r.result = { connectionId: 11 };
       break;
     case "connection.close":

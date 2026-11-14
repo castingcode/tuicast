@@ -68,7 +68,10 @@ TUICAST_DRIVER=/tmp/tuicast-example/tuicast-driver \
 ```
 
 Set `TUICAST_REFERENCE_ADDRESS` or `TUICAST_REFERENCE_TELNET_ADDRESS` to use
-other fixture addresses. The examples log in as `operator` using
+other fixture addresses. Each language also has a PTY example that needs no
+fixture: the driver starts `reference-tui` itself on a pseudo-terminal. It runs
+the `reference-tui` found on the driver's `PATH`, or the binary named by
+`TUICAST_REFERENCE_TUI`, such as `/tmp/tuicast-example/reference-tui`. The examples log in as `operator` using
 `TUICAST_REFERENCE_PASSWORD` for SSH and `TUICAST_REFERENCE_APP_PASSWORD` for the
 application, and fail with a clear message when either is missing. Docker
 Compose passes the same variables to the containers. Host-key checking is

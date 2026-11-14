@@ -3,7 +3,7 @@ package dev.castingcode.tuicast;
 import java.time.Duration;
 import java.util.Map;
 
-public sealed interface ConnectionConfig permits TelnetConfig, SshConfig {
+public sealed interface ConnectionConfig permits TelnetConfig, SshConfig, PtyConfig {
   Map<String, Object> parameters(Duration defaultTimeout);
 
   Duration timeout(Duration defaultTimeout);

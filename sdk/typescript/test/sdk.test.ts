@@ -110,6 +110,15 @@ test("configuration, cancellation and protocol failures", async () => {
     d.connect({ protocol: "telnet", address: "", timeout: 1 }),
     /address/,
   );
+  await assert.rejects(d.connect({ protocol: "pty", command: "" }), /command/);
+  const pty = await d.connect({
+    protocol: "pty",
+    command: "rf-client",
+    arguments: ["--warehouse", "DC1"],
+    environment: { WMS_ENV: "test" },
+    timeout: 2000,
+  });
+  assert.equal(pty.id, 12);
   const c = await d.connect({
     protocol: "ssh",
     address: "x",

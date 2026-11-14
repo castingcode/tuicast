@@ -174,7 +174,7 @@ exit before the configured timeout.
 
 - The SDK exposes `Driver`, `Connection`, and `Session` rather than mirroring
   raw JSON-RPC methods.
-- Typed SSH and Telnet values make invalid configurations harder to express.
+- Typed SSH, Telnet, and PTY values make invalid configurations harder to express.
 - Contexts support caller cancellation, while defaults avoid repeated timeout
   boilerplate.
 - Input methods do not automatically wait for idle. A key can legitimately
