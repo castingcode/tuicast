@@ -26,7 +26,7 @@ func TestProfileConfiguration(t *testing.T) {
     }
   }
 }`)
-		profiles, err := loadProfiles(path, "", discardLogger())
+		profiles, err := loadProfiles(path, "", false, discardLogger())
 		So(err, ShouldBeNil)
 		So(profiles, ShouldHaveLength, 1)
 		So(profiles[0].Name, ShouldEqual, "warehouse")
@@ -36,7 +36,7 @@ func TestProfileConfiguration(t *testing.T) {
 
 	Convey("Unknown configuration fields are rejected", t, func() {
 		path := writeConfig(t, `{"profiles":{"warehouse":{"protocol":"telnet","address":"host:23","terminal":"vt220","width":80,"height":24,"host":"unexpected"}}}`)
-		profiles, err := loadProfiles(path, "", discardLogger())
+		profiles, err := loadProfiles(path, "", false, discardLogger())
 		So(err, ShouldNotBeNil)
 		So(err.Error(), ShouldContainSubstring, "unknown field")
 		So(profiles, ShouldBeNil)
@@ -47,13 +47,13 @@ func TestProfileConfiguration(t *testing.T) {
 		So(os.Setenv("TUICAST_TEST_PASSWORD", secret), ShouldBeNil)
 		Reset(func() { _ = os.Unsetenv("TUICAST_TEST_PASSWORD") })
 		path := writeConfig(t, `{"profiles":{"warehouse":{"protocol":"ssh","address":"host:22","terminal":"xterm-256color","width":100,"height":30,"ssh":{"username":"automation","passwordEnv":"TUICAST_TEST_PASSWORD","hostKeyFingerprint":"SHA256:expected"}}}}`)
-		profiles, err := loadProfiles(path, "", discardLogger())
+		profiles, err := loadProfiles(path, "", false, discardLogger())
 		So(err, ShouldBeNil)
 		So(profiles, ShouldHaveLength, 1)
 		So(profiles[0].Connector, ShouldNotBeNil)
 
 		So(os.Unsetenv("TUICAST_TEST_PASSWORD"), ShouldBeNil)
-		profiles, err = loadProfiles(path, "", discardLogger())
+		profiles, err = loadProfiles(path, "", false, discardLogger())
 		So(err, ShouldNotBeNil)
 		So(err.Error(), ShouldNotContainSubstring, secret)
 		So(profiles, ShouldBeNil)
@@ -63,10 +63,22 @@ func TestProfileConfiguration(t *testing.T) {
 		So(os.Setenv("TUICAST_TEST_PASSWORD", "secret"), ShouldBeNil)
 		Reset(func() { _ = os.Unsetenv("TUICAST_TEST_PASSWORD") })
 		path := writeConfig(t, `{"profiles":{"warehouse":{"protocol":"ssh","address":"host:22","terminal":"vt220","width":80,"height":24,"ssh":{"username":"automation","passwordEnv":"TUICAST_TEST_PASSWORD"}}}}`)
-		profiles, err := loadProfiles(path, "", discardLogger())
+		profiles, err := loadProfiles(path, "", false, discardLogger())
 		So(err, ShouldNotBeNil)
 		So(err.Error(), ShouldContainSubstring, "exactly one SSH host-key")
 		So(profiles, ShouldBeNil)
+	})
+
+	Convey("A PTY profile is rejected unless the operator passes -allow-pty", t, func() {
+		path := writeConfig(t, `{"profiles":{"local":{"protocol":"pty","terminal":"vt220","width":80,"height":24,"pty":{"command":"rf-client"}}}}`)
+		profiles, err := loadProfiles(path, "", false, discardLogger())
+		So(err, ShouldNotBeNil)
+		So(err.Error(), ShouldContainSubstring, "-allow-pty")
+		So(profiles, ShouldBeNil)
+
+		err = run(t.Context(), []string{"-config", path}, io.NopCloser(bytes.NewReader(nil)), nopWriteCloser{io.Discard}, discardLogger())
+		So(err, ShouldNotBeNil)
+		So(err.Error(), ShouldContainSubstring, "-allow-pty")
 	})
 
 	Convey("The command requires a profile configuration", t, func() {
@@ -160,7 +172,7 @@ func TestSecretSources(t *testing.T) {
 		Convey("A failing secret command does not block startup and reports stderr but not stdout", func() {
 			So(os.Setenv("TUICAST_TEST_SECRET_HELPER", "fail"), ShouldBeNil)
 			path := writeConfig(t, `{"profiles":{"warehouse":{"protocol":"ssh","address":"host:22","terminal":"vt220","width":80,"height":24,"ssh":{"username":"automation","passwordEnv":"TUICAST_TEST_SECRET","insecureSkipHostKeyCheck":true}}}}`)
-			profiles, err := loadProfiles(path, helper, discardLogger())
+			profiles, err := loadProfiles(path, helper, false, discardLogger())
 			So(err, ShouldBeNil)
 			So(profiles, ShouldHaveLength, 1)
 

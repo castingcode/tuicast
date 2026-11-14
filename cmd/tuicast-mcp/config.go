@@ -11,11 +11,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/castingcode/tuicast"
 	"github.com/castingcode/tuicast/mcpserver"
+	"github.com/castingcode/tuicast/pty"
 	tuicastssh "github.com/castingcode/tuicast/ssh"
 	"github.com/castingcode/tuicast/telnet"
 	gossh "golang.org/x/crypto/ssh"
@@ -42,6 +44,18 @@ type profileConfig struct {
 	Width       int        `json:"width"`
 	Height      int        `json:"height"`
 	SSH         *sshConfig `json:"ssh,omitempty"`
+	PTY         *ptyConfig `json:"pty,omitempty"`
+}
+
+type ptyConfig struct {
+	Command          string            `json:"command"`
+	Arguments        []string          `json:"arguments,omitempty"`
+	WorkingDirectory string            `json:"workingDirectory,omitempty"`
+	Environment      map[string]string `json:"environment,omitempty"`
+	// EnvironmentFromSecrets maps a program environment variable to the
+	// name of a secret resolved like passwordEnv.
+	EnvironmentFromSecrets map[string]string `json:"environmentFromSecrets,omitempty"`
+	ClearEnvironment       bool              `json:"clearEnvironment,omitempty"`
 }
 
 type sshConfig struct {
@@ -55,7 +69,10 @@ type sshConfig struct {
 	ConnectTimeoutMilliseconds int    `json:"connectTimeoutMilliseconds,omitempty"`
 }
 
-func loadProfiles(path, secretCommand string, logger *slog.Logger) ([]mcpserver.Profile, error) {
+// loadProfiles reads and validates the profile configuration. PTY profiles
+// run local programs, so they are accepted only when allowPTY is set by the
+// operator who starts the server.
+func loadProfiles(path, secretCommand string, allowPTY bool, logger *slog.Logger) ([]mcpserver.Profile, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("opening TUICast MCP config: %w", err)
@@ -78,7 +95,7 @@ func loadProfiles(path, secretCommand string, logger *slog.Logger) ([]mcpserver.
 	baseDirectory := filepath.Dir(path)
 	profiles := make([]mcpserver.Profile, 0, len(config.Profiles))
 	for name, configured := range config.Profiles {
-		profile, err := makeProfile(name, configured, baseDirectory, secretCommand, logger)
+		profile, err := makeProfile(name, configured, baseDirectory, secretCommand, allowPTY, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -98,12 +115,21 @@ func requireJSONEnd(decoder *json.Decoder) error {
 	return nil
 }
 
-func makeProfile(name string, configured profileConfig, baseDirectory, secretCommand string, logger *slog.Logger) (mcpserver.Profile, error) {
+func makeProfile(name string, configured profileConfig, baseDirectory, secretCommand string, allowPTY bool, logger *slog.Logger) (mcpserver.Profile, error) {
 	if strings.TrimSpace(name) == "" || strings.TrimSpace(name) != name {
 		return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP config: profile name %q is invalid", name)
 	}
-	if configured.Address == "" {
-		return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP profile %q: address is required", name)
+	if configured.Protocol == "pty" {
+		if configured.Address != "" {
+			return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP profile %q: address is not valid for pty", name)
+		}
+	} else {
+		if configured.Address == "" {
+			return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP profile %q: address is required", name)
+		}
+		if configured.PTY != nil {
+			return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP profile %q: pty settings are valid only for protocol pty", name)
+		}
 	}
 	terminalProfile := tuicast.TerminalProfile(configured.Terminal)
 	if terminalProfile != tuicast.ProfileVT220 && terminalProfile != tuicast.ProfileXTerm {
@@ -126,6 +152,17 @@ func makeProfile(name string, configured profileConfig, baseDirectory, secretCom
 			return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP profile %q: ssh settings are required", name)
 		}
 		connector, err = makeSSHConnector(name, configured.Address, *configured.SSH, baseDirectory, secretCommand, logger)
+	case "pty":
+		if !allowPTY {
+			return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP profile %q: protocol pty runs a local program; start tuicast-mcp with -allow-pty to enable it", name)
+		}
+		if configured.SSH != nil {
+			return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP profile %q: ssh settings are not valid for pty", name)
+		}
+		if configured.PTY == nil {
+			return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP profile %q: pty settings are required", name)
+		}
+		connector, err = makePTYConnector(name, *configured.PTY, baseDirectory, secretCommand, logger)
 	default:
 		return mcpserver.Profile{}, fmt.Errorf("validating TUICast MCP profile %q: unsupported protocol %q", name, configured.Protocol)
 	}
@@ -217,6 +254,107 @@ func makeSSHConnector(profileName, address string, configured sshConfig, baseDir
 		return nil, fmt.Errorf("creating TUICast MCP profile %q SSH connector: %w", profileName, err)
 	}
 	return connector, nil
+}
+
+func makePTYConnector(profileName string, configured ptyConfig, baseDirectory, secretCommand string, logger *slog.Logger) (tuicast.Connector, error) {
+	if configured.Command == "" {
+		return nil, fmt.Errorf("validating TUICast MCP profile %q: pty command is required", profileName)
+	}
+	// Like key files, a command path is relative to the configuration file.
+	// A bare name is looked up on PATH.
+	command := configured.Command
+	if strings.ContainsRune(command, filepath.Separator) {
+		command = resolvePath(baseDirectory, command)
+	}
+	if _, err := exec.LookPath(command); err != nil {
+		return nil, fmt.Errorf("validating TUICast MCP profile %q pty command: %w", profileName, err)
+	}
+	directory := ""
+	if configured.WorkingDirectory != "" {
+		directory = resolvePath(baseDirectory, configured.WorkingDirectory)
+	}
+
+	environment := make([]string, 0, len(configured.Environment))
+	for name, value := range configured.Environment {
+		if err := validateEnvironmentName(profileName, name); err != nil {
+			return nil, err
+		}
+		if _, duplicate := configured.EnvironmentFromSecrets[name]; duplicate {
+			return nil, fmt.Errorf("validating TUICast MCP profile %q: environment variable %q is set by both environment and environmentFromSecrets", profileName, name)
+		}
+		environment = append(environment, name+"="+value)
+	}
+	sort.Strings(environment)
+	secrets := make(map[string]secret, len(configured.EnvironmentFromSecrets))
+	for name, secretName := range configured.EnvironmentFromSecrets {
+		if err := validateEnvironmentName(profileName, name); err != nil {
+			return nil, err
+		}
+		resolved, err := resolveSecret(profileName, fmt.Sprintf("pty environment variable %s", name), secretName, secretCommand, logger)
+		if err != nil {
+			return nil, err
+		}
+		secrets[name] = resolved
+	}
+
+	config := pty.Config{
+		Command:  command,
+		Args:     configured.Arguments,
+		Dir:      directory,
+		Env:      environment,
+		ClearEnv: configured.ClearEnvironment,
+	}
+	connector, err := pty.NewConnector(config)
+	if err != nil {
+		return nil, fmt.Errorf("creating TUICast MCP profile %q PTY connector: %w", profileName, err)
+	}
+	logger.Info("TUICast MCP PTY profile enabled", "profile", profileName, "command", command)
+	if len(secrets) == 0 {
+		return connector, nil
+	}
+	return &ptySecretConnector{profileName: profileName, config: config, secrets: secrets}, nil
+}
+
+func validateEnvironmentName(profileName, name string) error {
+	if name == "" || strings.Contains(name, "=") {
+		return fmt.Errorf("validating TUICast MCP profile %q: environment variable name %q is invalid", profileName, name)
+	}
+	if name == "TERM" {
+		return fmt.Errorf("validating TUICast MCP profile %q: TERM is set from the profile's terminal", profileName)
+	}
+	return nil
+}
+
+// ptySecretConnector adds secrets to a PTY program's environment on each
+// connection attempt, so a secret command can prompt or return a rotated
+// value just as it does for SSH passwords.
+type ptySecretConnector struct {
+	profileName string
+	config      pty.Config
+	secrets     map[string]secret
+}
+
+var _ tuicast.Connector = (*ptySecretConnector)(nil)
+
+func (c *ptySecretConnector) Connect(ctx context.Context) (tuicast.SessionOpener, error) {
+	config := c.config
+	config.Env = append([]string(nil), c.config.Env...)
+	for name, resolved := range c.secrets {
+		value, err := resolved.get()
+		if err != nil {
+			return nil, err
+		}
+		config.Env = append(config.Env, name+"="+value)
+	}
+	connector, err := pty.NewConnector(config)
+	if err != nil {
+		return nil, fmt.Errorf("creating TUICast MCP profile %q PTY connector: %w", c.profileName, err)
+	}
+	opener, err := connector.Connect(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("connecting TUICast MCP profile %q PTY: %w", c.profileName, err)
+	}
+	return opener, nil
 }
 
 func makeHostKeyCallback(profileName string, configured sshConfig, baseDirectory string, logger *slog.Logger) (gossh.HostKeyCallback, error) {

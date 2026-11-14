@@ -1,0 +1,17 @@
+{
+  "profiles": {
+    "reference-pty": {
+      "description": "TUICast reference application started locally on a pseudo-terminal",
+      "protocol": "pty",
+      "terminal": "xterm-256color",
+      "width": 80,
+      "height": 24,
+      "pty": {
+        "command": "reference-tui",
+        "environmentFromSecrets": {
+          "TUICAST_REFERENCE_APP_PASSWORD": "TUICAST_REFERENCE_APP_PASSWORD"
+        }
+      }
+    }
+  }
+}

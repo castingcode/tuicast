@@ -11,6 +11,13 @@ profile, or screen dimensions. An operator defines these values in named
 profiles. MCP tools accept only a profile name, and `tuicast_list_profiles`
 returns descriptive metadata without endpoint addresses or credential fields.
 
+A PTY profile runs a local program instead of connecting to a host. The
+program, its arguments, working directory, and environment are also fixed by
+the profile, and `tuicast_list_profiles` reports only `protocol: "pty"`, never
+the command, arguments, or environment. Because such a profile runs a program,
+`tuicast-mcp` refuses to start with one unless the operator passes `-allow-pty`;
+see [PTY profiles](#pty-profiles).
+
 Profiles name SSH passwords and private-key passphrases rather than containing
 them; see [Secrets](#secrets). Private keys and known-hosts data are read from
 configured files. Secret values are neither returned by tools nor included in
@@ -69,10 +76,67 @@ Relative private-key and known-hosts paths are resolved from the configuration
 file's directory. The authoritative format is
 `schema/mcp-profiles.schema.json`; runtime decoding also rejects unknown fields.
 
+### PTY profiles
+
+A profile with `"protocol": "pty"` runs a program on a pseudo-terminal on the
+machine running `tuicast-mcp`, so an agent can explore a local terminal
+application without a network service. Each session starts its own instance of
+the program, with `TERM` set to the profile's terminal and the PTY sized to the
+profile's dimensions. The session ends when the program exits; a non-zero exit
+status appears as `sessionError`. Closing the session or connection, or the
+client disconnecting, hangs up the program and kills it if it is still running
+a second later. PTY profiles work when `tuicast-mcp` runs on Linux or macOS.
+
+```json
+{
+  "profiles": {
+    "rf-client": {
+      "description": "Local RF client against the test warehouse",
+      "protocol": "pty",
+      "terminal": "vt220",
+      "width": 40,
+      "height": 16,
+      "pty": {
+        "command": "./bin/rf-client",
+        "arguments": ["--warehouse", "DC1"],
+        "workingDirectory": "./work",
+        "environment": {"WMS_ENV": "test"},
+        "environmentFromSecrets": {"WMS_PASSWORD": "TUICAST_WMS_PASSWORD"}
+      }
+    }
+  }
+}
+```
+
+```sh
+tuicast-mcp -config ./tuicast-mcp.json -allow-pty
+```
+
+A PTY profile has no `address` or `ssh` settings. A `command` containing a
+path separator and a relative `workingDirectory` are resolved from the
+configuration file's directory; a bare command name is looked up on the
+server's `PATH`. Startup fails if the command cannot be found. The program
+inherits the server's environment, without `TERM`, `LINES`, and `COLUMNS`,
+plus `environment`, unless `clearEnvironment` is true. Neither map may set
+`TERM`, and a variable may appear in only one of them.
+
+`environmentFromSecrets` maps a program environment variable to a secret name,
+resolved exactly like `passwordEnv` (see [Secrets](#secrets)). A secret command
+runs on every connection attempt. The value is passed only in the program's
+environment, which other processes of the same operating-system user can read,
+and is never returned by tools or logged.
+
+`-allow-pty` is a flag rather than a profile field for the same reason as
+`-secret-command`: only the operator who starts the server can enable it, so a
+configuration file from a cloned repository cannot make the server run
+programs on its own. With the flag, the server runs exactly the programs its
+profiles name, as the server's user; the model still chooses only a profile.
+A startup `Info` log records each enabled PTY profile and its command.
+
 ## Secrets
 
-`passwordEnv` and `privateKeyPassphraseEnv` name a secret, such as
-`TUICAST_WMS_PASSWORD`. `tuicast-mcp` resolves each named secret in a fixed
+`passwordEnv`, `privateKeyPassphraseEnv`, and the values of a PTY profile's
+`environmentFromSecrets` name a secret, such as `TUICAST_WMS_PASSWORD`. `tuicast-mcp` resolves each named secret in a fixed
 order:
 
 1. The `NAME` environment variable.
@@ -92,7 +156,8 @@ its secrets: environment variables in CI, `_FILE` with Docker or Kubernetes
 secrets, and a command that reads a password manager or the operating system's
 keychain on a workstation. Only the operator who starts the server chooses the
 command; a profile cannot, so a profile from a cloned repository cannot run
-programs. The command is a flag rather than a profile field for that reason,
+programs unless the operator also enables [PTY profiles](#pty-profiles). The
+command is a flag rather than a profile field for that reason,
 and because MCP clients forward command-line arguments reliably. VS Code's
 Agent Host sessions, for example, do not apply `envFile`.
 

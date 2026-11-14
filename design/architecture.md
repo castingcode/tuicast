@@ -47,7 +47,9 @@ clients. `cmd/tuicast-mcp` is its composition root and owns its terminal
 connections directly; it does not multiplex MCP over the driver's single-client
 standard streams. Operators configure named profiles that resolve concrete
 transports and credentials before the server starts. MCP clients may select a
-profile name but cannot provide an arbitrary network address or read credentials.
+profile name but cannot provide an arbitrary network address or program, or read
+credentials. Profiles that run local programs on a pseudo-terminal require the
+operator's explicit `-allow-pty` flag.
 
 SDKs live under `sdk/` and are independently publishable language modules. The
 Go SDK has its own `go.mod` and does not import the root module, so consumers do
