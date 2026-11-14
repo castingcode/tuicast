@@ -68,6 +68,7 @@ who wants to use TUICast.
 tuicast/            # Core domain and public orchestration API
   ssh/              # SSH transport adapter
   telnet/           # Telnet transport and negotiation
+  pty/              # Local programs on pseudo-terminals
   ansi/             # Shared ANSI/DEC terminal emulation engine
   vt220/            # VT220 terminal emulation
   xterm/            # xterm terminal emulation

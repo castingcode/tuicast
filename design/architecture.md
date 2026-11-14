@@ -71,6 +71,7 @@ language over layer language, for example:
 - `ansi` — shared ANSI/DEC terminal emulation behavior
 - `ssh` — SSH transport
 - `telnet` — Telnet connection and option negotiation
+- `pty` — local programs on pseudo-terminals
 - `parsing` — parse terminal byte streams into structured updates
 
 A package named `vt220` tells a reader what lives there. A package named

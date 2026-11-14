@@ -26,14 +26,15 @@ type SessionStream interface {
 	Resize(width, height int) error
 }
 
-// SessionRequest describes the terminal requested from a remote server.
+// SessionRequest describes the terminal requested from the transport.
 type SessionRequest struct {
 	TerminalType string
 	Width        int
 	Height       int
 }
 
-// Connection is a server-managed connection to a remote terminal server.
+// Connection is a server-managed transport connection, such as a network
+// connection to a terminal server or a launcher for local programs.
 type Connection struct {
 	mu sync.Mutex
 
