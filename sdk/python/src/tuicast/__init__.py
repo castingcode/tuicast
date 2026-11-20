@@ -1,4 +1,5 @@
 from .client import (
+    PTY,
     SSH,
     Connection,
     Driver,

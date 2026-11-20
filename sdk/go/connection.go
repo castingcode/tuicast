@@ -96,6 +96,46 @@ func (config SSH) driverParams(defaultTimeout time.Duration) (map[string]any, ti
 	}, timeout, nil
 }
 
+// PTY configures a connection that runs a program on a pseudo-terminal on
+// the driver's machine. Each session opened on the connection starts its own
+// instance of the program, with TERM set to the session's terminal profile.
+type PTY struct {
+	// Command is looked up on the driver's PATH when it has no path
+	// separator; a relative path is resolved from WorkingDirectory.
+	Command          string
+	Arguments        []string
+	WorkingDirectory string
+	// Environment adds variables to the environment the program inherits
+	// from the driver. TERM cannot be set.
+	Environment map[string]string
+	// ClearEnvironment starts the program with only Environment and TERM.
+	ClearEnvironment bool
+	Timeout          time.Duration
+}
+
+func (config PTY) driverParams(defaultTimeout time.Duration) (map[string]any, time.Duration, error) {
+	if config.Command == "" {
+		return nil, 0, fmt.Errorf("configuring PTY connection: command is required")
+	}
+	timeout := config.Timeout
+	if timeout == 0 {
+		timeout = defaultTimeout
+	}
+	milliseconds, err := positiveMilliseconds(timeout)
+	if err != nil {
+		return nil, 0, fmt.Errorf("configuring PTY connection timeout: %w", err)
+	}
+	return map[string]any{
+		"protocol":                   "pty",
+		"command":                    config.Command,
+		"arguments":                  config.Arguments,
+		"workingDirectory":           config.WorkingDirectory,
+		"environment":                config.Environment,
+		"clearEnvironment":           config.ClearEnvironment,
+		"connectTimeoutMilliseconds": milliseconds,
+	}, timeout, nil
+}
+
 // Connection is a driver-managed transport connection.
 type Connection struct {
 	client *Driver
@@ -108,7 +148,7 @@ type Connection struct {
 // ID returns the driver's connection identifier.
 func (c *Connection) ID() uint64 { return c.id }
 
-// Connect opens a typed SSH or Telnet connection.
+// Connect opens a typed SSH, Telnet, or PTY connection.
 func (c *Driver) Connect(ctx context.Context, config ConnectionConfig) (*Connection, error) {
 	if config == nil {
 		return nil, fmt.Errorf("opening connection: configuration is required")

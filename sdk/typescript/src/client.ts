@@ -475,9 +475,13 @@ function sessionState(r: { state: string; error?: string }): SessionState {
 }
 
 function validateConnection(c: ConnectionConfig) {
-  if (!c.address) throw new TypeError("address is required");
   if (c.timeout !== undefined && c.timeout <= 0)
     throw new TypeError("timeout must be positive");
+  if (c.protocol === "pty") {
+    if (!c.command) throw new TypeError("command is required");
+    return;
+  }
+  if (!c.address) throw new TypeError("address is required");
   if (c.protocol === "ssh") {
     if (!c.username) throw new TypeError("username is required");
     if (!c.password && !c.privateKey)

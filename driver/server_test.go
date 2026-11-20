@@ -145,6 +145,22 @@ func TestDriverProtocol(t *testing.T) {
 		So(responseErr.Code, ShouldEqual, -32602)
 	})
 
+	Convey("The snapshot shows a pty connection's program without its arguments or environment", t, func() {
+		server := newTestDriver()
+		defer server.Close()
+
+		opened, responseErr := server.openConnection(raw(map[string]any{
+			"protocol":    "pty",
+			"command":     "/opt/wms/bin/rf-client",
+			"arguments":   []string{"--password", "secret"},
+			"environment": map[string]string{"WMS_TOKEN": "secret"},
+		}))
+		So(responseErr, ShouldBeNil)
+		So(server.DriverSnapshot().Connections, ShouldResemble, []ConnectionSnapshot{{
+			ID: opened.(map[string]uint64)["connectionId"], Protocol: "pty", Address: "/opt/wms/bin/rf-client",
+		}})
+	})
+
 	Convey("Subscriptions emit the current screen as a notification", t, func() {
 		server := newTestDriver()
 		defer server.Close()

@@ -38,6 +38,7 @@ func run(ctx context.Context, arguments []string, input io.ReadCloser, output io
 	flags.SetOutput(io.Discard)
 	configPath := flags.String("config", "", "path to a TUICast MCP profile configuration file")
 	secretCommand := flags.String("secret-command", "", "executable that prints a named secret; used when neither NAME nor NAME_FILE is set")
+	allowPTY := flags.Bool("allow-pty", false, "allow profiles with protocol pty, which run local programs named in the configuration")
 	var showHelp, showVersion bool
 	flags.BoolVar(&showHelp, "help", false, "show this help and exit")
 	flags.BoolVar(&showHelp, "h", false, "shorthand for -help")
@@ -72,7 +73,7 @@ func run(ctx context.Context, arguments []string, input io.ReadCloser, output io
 		}
 		*secretCommand = resolved
 	}
-	profiles, err := loadProfiles(*configPath, *secretCommand, logger)
+	profiles, err := loadProfiles(*configPath, *secretCommand, *allowPTY, logger)
 	if err != nil {
 		return err
 	}

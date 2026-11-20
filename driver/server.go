@@ -350,10 +350,16 @@ func (s *Server) openConnection(data json.RawMessage) (any, *responseError) {
 	}
 	s.nextConnection++
 	id := s.nextConnection
+	// A PTY connection has no address; show its program instead. Arguments
+	// and environment are left out because they may contain secrets.
+	address := options.Address
+	if options.Protocol == "pty" {
+		address = options.Command
+	}
 	s.connections[id] = connectionRecord{
 		connection: connection,
 		protocol:   options.Protocol,
-		address:    options.Address,
+		address:    address,
 	}
 	return map[string]uint64{"connectionId": id}, nil
 }

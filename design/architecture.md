@@ -33,7 +33,7 @@ new protocols or terminal types be added without rewriting the session model.
 
 The root package remains the embeddable Go API. The `driver` package exposes
 that API as JSON-RPC 2.0 over streams, while `cmd/tuicast-driver` composes the
-concrete SSH, Telnet, VT220, and xterm implementations. This preserves the core
+concrete SSH, Telnet, PTY, VT220, and xterm implementations. This preserves the core
 dependency direction: the driver depends on the domain and adapters, but the
 domain does not depend on the driver or a delivery protocol.
 
@@ -47,7 +47,9 @@ clients. `cmd/tuicast-mcp` is its composition root and owns its terminal
 connections directly; it does not multiplex MCP over the driver's single-client
 standard streams. Operators configure named profiles that resolve concrete
 transports and credentials before the server starts. MCP clients may select a
-profile name but cannot provide an arbitrary network address or read credentials.
+profile name but cannot provide an arbitrary network address or program, or read
+credentials. Profiles that run local programs on a pseudo-terminal require the
+operator's explicit `-allow-pty` flag.
 
 SDKs live under `sdk/` and are independently publishable language modules. The
 Go SDK has its own `go.mod` and does not import the root module, so consumers do
@@ -71,6 +73,7 @@ language over layer language, for example:
 - `ansi` — shared ANSI/DEC terminal emulation behavior
 - `ssh` — SSH transport
 - `telnet` — Telnet connection and option negotiation
+- `pty` — local programs on pseudo-terminals
 - `parsing` — parse terminal byte streams into structured updates
 
 A package named `vt220` tells a reader what lives there. A package named

@@ -147,6 +147,7 @@ jobs:
           (
             cd examples/go
             GOWORK=off TUICAST_DRIVER="$GITHUB_WORKSPACE/.bin/tuicast-driver" \
+              TUICAST_REFERENCE_TUI="$GITHUB_WORKSPACE/.bin/reference-tui" \
               go test -race ./reference
           )
 
@@ -305,6 +306,7 @@ jobs:
         working-directory: examples/java
         env:
           TUICAST_DRIVER: ${{ github.workspace }}/.bin/tuicast-driver
+          TUICAST_REFERENCE_TUI: ${{ github.workspace }}/.bin/reference-tui
         run: mvn --batch-mode verify
 
       - name: Test Java Cucumber examples
@@ -425,6 +427,7 @@ jobs:
         working-directory: examples/typescript
         env:
           TUICAST_DRIVER: ${{ github.workspace }}/.bin/tuicast-driver
+          TUICAST_REFERENCE_TUI: ${{ github.workspace }}/.bin/reference-tui
         run: npm run reference
 
       - name: Test TypeScript Cucumber examples
@@ -540,6 +543,7 @@ jobs:
       - name: Test Python reference examples
         env:
           TUICAST_DRIVER: ${{ github.workspace }}/.bin/tuicast-driver
+          TUICAST_REFERENCE_TUI: ${{ github.workspace }}/.bin/reference-tui
         run: sdk/python/.venv/bin/python -m pytest -c sdk/python/pyproject.toml --no-cov -m reference examples/python/reference
 
       - name: Test Python Cucumber examples and generate report

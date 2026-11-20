@@ -88,6 +88,30 @@ Copy [`clients/cursor.json`](clients/cursor.json) to `.cursor/mcp.json`, then
 enable `tuicast-reference` under **Cursor Settings → Tools & MCP**. The template
 uses Cursor's project-level `mcpServers` format and environment interpolation.
 
+### Without a server: PTY profile
+
+[`reference-pty-profile.json`](reference-pty-profile.json) has `tuicast-mcp`
+start `reference-tui` itself on a pseudo-terminal for each session, so you don't
+need to start the SSH fixture. Because the profile runs a program, the server
+accepts it only with the operator's `-allow-pty` flag. In the client
+configuration, point `-config` at the PTY profile and add the flag:
+
+```json
+"args": [
+  "-config",
+  "${workspaceFolder}/examples/mcp/reference-pty-profile.json",
+  "-allow-pty",
+  "-secret-command",
+  "${workspaceFolder}/examples/mcp/env-local-secret.sh"
+]
+```
+
+The profile passes `TUICAST_REFERENCE_APP_PASSWORD` to the program through
+`environmentFromSecrets`, so the secret command supplies it like the SSH
+password above. PTY profiles work when `tuicast-mcp` runs on Linux or macOS.
+The agent sees a profile named `reference-pty`; replace `reference-ssh` with
+that name in the prompts below.
+
 ## Run a workflow
 
 Paste one of these prompts into the editor's agent mode:

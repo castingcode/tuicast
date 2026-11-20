@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 import tuicast
-from conftest import login, open_scenario
+from conftest import login, open_scenario, required_env
 
 pytestmark = pytest.mark.reference
 
@@ -146,6 +146,22 @@ def test_telnet_workflow():
     with tuicast.Driver.launch(os.getenv("TUICAST_DRIVER", "tuicast-driver")) as driver:
         config = tuicast.Telnet(
             os.getenv("TUICAST_REFERENCE_TELNET_ADDRESS", "127.0.0.1:2323")
+        )
+        with driver.connect(config) as connection, connection.open_session() as session:
+            login(session)
+            screen = open_scenario(session, 1, "RECEIVING FORM")
+            assert screen.contains("Purchase order")
+
+
+def test_pty_workflow():
+    with tuicast.Driver.launch(os.getenv("TUICAST_DRIVER", "tuicast-driver")) as driver:
+        config = tuicast.PTY(
+            os.getenv("TUICAST_REFERENCE_TUI", "reference-tui"),
+            environment={
+                "TUICAST_REFERENCE_APP_PASSWORD": required_env(
+                    "TUICAST_REFERENCE_APP_PASSWORD"
+                )
+            },
         )
         with driver.connect(config) as connection, connection.open_session() as session:
             login(session)

@@ -26,6 +26,7 @@ const driverPath = process.env.TUICAST_DRIVER ?? "tuicast-driver";
 const sshAddress = process.env.TUICAST_REFERENCE_ADDRESS ?? "127.0.0.1:2222";
 const telnetAddress =
   process.env.TUICAST_REFERENCE_TELNET_ADDRESS ?? "127.0.0.1:2323";
+const referenceTUI = process.env.TUICAST_REFERENCE_TUI ?? "reference-tui";
 
 interface Fixture {
   driver: Driver;
@@ -290,6 +291,27 @@ test("a timed-out wait retains its condition and last screen", async () => {
 
 test("the same workflow runs over Telnet", async () => {
   const fixture = await launch({ protocol: "telnet", address: telnetAddress });
+  const session = await fixture.connection.openSession();
+  try {
+    await login(session);
+    const screen = await openScenario(session, 1, "RECEIVING FORM");
+    assert(screen.contains("Purchase order"));
+  } finally {
+    await session.close();
+    await fixture.close();
+  }
+});
+
+test("the same workflow runs on a local pseudo-terminal", async () => {
+  const fixture = await launch({
+    protocol: "pty",
+    command: referenceTUI,
+    environment: {
+      TUICAST_REFERENCE_APP_PASSWORD: requiredEnv(
+        "TUICAST_REFERENCE_APP_PASSWORD",
+      ),
+    },
+  });
   const session = await fixture.connection.openSession();
   try {
     await login(session);

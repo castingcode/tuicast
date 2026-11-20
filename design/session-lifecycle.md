@@ -35,6 +35,29 @@ Telnet does not provide SSH-style channel multiplexing. The Telnet stream
 handles IAC escaping, option negotiation, terminal-type reporting, and NAWS
 window-size updates before terminal bytes reach the emulator.
 
+A PTY `Connection` starts no process. `Connect` resolves the configured program
+so a missing or non-executable command fails before any session opens. Each
+session then starts its own instance of the program on a new pseudo-terminal,
+so a connection can run several sessions. The program is a session leader with
+the PTY as its controlling terminal, and its standard input, output, and error
+are the terminal. Its environment is inherited, without `TERM`, `LINES`, and
+`COLUMNS`, unless the connector clears it, and `TERM` is always set from the
+session's terminal profile. There is no negotiation: `TERM` and the PTY window
+size are all the program learns about the terminal, and resizing sets the
+window size, which signals the program with `SIGWINCH`.
+
+When the program exits, the session ends after its remaining output is read.
+A zero exit status ends it normally; any other status or a fatal signal becomes
+`Session.Err`. Closing a PTY session hangs up the program's process group,
+closes the terminal, which unblocks any pending read, and kills the group if
+the program is still running after one second. If TUICast exits without closing
+a session, the kernel hangs up the terminal and signals the program. A process
+that leaves the program's session and keeps the terminal open is not stopped,
+and on Linux a session whose program has exited can stay active until that
+process closes the terminal or the session is closed. macOS revokes the
+terminal when the program exits, which ends the session. PTY sessions are supported on Linux and
+macOS; on other platforms `Connect` fails.
+
 The `memory` package provides the same contracts over `net.Pipe`. It is useful
 for deterministic automation tests that should exercise the real session
 lifecycle without a network service.

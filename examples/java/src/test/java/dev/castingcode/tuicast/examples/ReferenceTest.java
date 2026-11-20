@@ -244,6 +244,23 @@ class ReferenceTest {
     assertTrue(open(session(), 1, "RECEIVING FORM").contains("Purchase order"));
   }
 
+  @Test
+  void pty() {
+    connection.close();
+    driver.close();
+    driver =
+        Driver.launch(
+            new Driver.Options(
+                env("TUICAST_DRIVER", "tuicast-driver"), null, null, Duration.ofSeconds(30), null));
+    connection =
+        driver.connect(
+            PtyConfig.builder(env("TUICAST_REFERENCE_TUI", "reference-tui"))
+                .environment(
+                    "TUICAST_REFERENCE_APP_PASSWORD", requiredEnv("TUICAST_REFERENCE_APP_PASSWORD"))
+                .build());
+    assertTrue(open(session(), 1, "RECEIVING FORM").contains("Purchase order"));
+  }
+
   private static String env(String name, String fallback) {
     return System.getenv().getOrDefault(name, fallback);
   }

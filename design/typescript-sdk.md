@@ -7,8 +7,9 @@ protocol version 1, correlates concurrent responses, and owns process shutdown.
 
 ## API
 
-`Driver.connect()` accepts discriminated `SSHConfig` and `TelnetConfig` values;
-SSH authentication and exactly one host-key policy are validated locally.
+`Driver.connect()` accepts discriminated `SSHConfig`, `TelnetConfig`, and
+`PTYConfig` values; SSH authentication and exactly one host-key policy, and the
+PTY command, are validated locally.
 Connections open VT220 80x24 sessions by default, or callers can select
 `xterm-256color`, dimensions, and ENQ answerback. `Session` supports text and
 byte input, named keys/modifiers, resizing, detached screens, recursive

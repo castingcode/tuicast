@@ -24,12 +24,12 @@ func NewMCPServer(service *Service, version string) (*mcp.Server, error) {
 	recordingControl := &mcp.ToolAnnotations{DestructiveHint: boolPointer(false), OpenWorldHint: boolPointer(false)}
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name: "tuicast_list_profiles", Description: "List operator-approved terminal connection profiles. Credentials and endpoint addresses are never returned.", Annotations: readOnly,
+		Name: "tuicast_list_profiles", Description: "List operator-approved terminal connection profiles. Credentials, endpoint addresses, and local program commands are never returned.", Annotations: readOnly,
 	}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, profilesOutput, error) {
 		return nil, profilesOutput{Profiles: service.Profiles()}, nil
 	})
 	mcp.AddTool(server, &mcp.Tool{
-		Name: "tuicast_connect", Description: "Connect to an operator-approved terminal profile by name. Arbitrary host addresses are not accepted.", Annotations: changesTerminal,
+		Name: "tuicast_connect", Description: "Connect to an operator-approved terminal profile by name. Arbitrary host addresses and programs are not accepted.", Annotations: changesTerminal,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input connectInput) (*mcp.CallToolResult, ConnectionInfo, error) {
 		result, err := service.Connect(ctx, input.Profile)
 		return nil, result, err

@@ -3,7 +3,7 @@
 The Java 21 SDK in `sdk/java` is a thin, thread-safe JSON-RPC v1 client for a
 child `tuicast-driver`. It uses one reader virtual thread, correlates concurrent
 out-of-order replies, and exposes `Driver`, `Connection`, `Session`, immutable
-`Screen` snapshots, typed SSH/Telnet configuration, matchers, waits, session-end
+`Screen` snapshots, typed SSH/Telnet/PTY configuration, matchers, waits, session-end
 state (`Session.state()` and `Session.waitForEnd()`), and bounded screen/event
 subscriptions. `Color` names cell palette indexes alongside the `Screen`
 attribute constants. A failed wait throws `WaitException` with the last screen
@@ -51,8 +51,9 @@ integration, and Cucumber failures distinct. The SDK enforces 80% line and 60%
 branch coverage. Run `mvn spotless:apply` in either Maven directory to apply
 formatting.
 
-Set `TUICAST_DRIVER`, `TUICAST_REFERENCE_ADDRESS`, and (for Telnet-oriented
-tests) `TUICAST_REFERENCE_TELNET_ADDRESS` as for the Go examples. Java Cucumber
+Set `TUICAST_DRIVER`, `TUICAST_REFERENCE_ADDRESS`, (for Telnet-oriented tests)
+`TUICAST_REFERENCE_TELNET_ADDRESS`, and (for PTY tests) `TUICAST_REFERENCE_TUI`
+as for the Go examples. Java Cucumber
 loads `examples/features` as a test resource rather than copying it. Its JSON
 plugin writes `target/cucumber.json`; failures attach plain text and an inline
 SVG before cleanup, while successful input steps are never captured.
