@@ -43,7 +43,7 @@ unusual. See [Keys](../reference/keys.md).
 
 No emulator implements every escape sequence. When the application sends one
 TUICast does not support, TUICast ignores it rather than printing garbage, and
-reports it as an **unsupported sequence** event, such as `CSI ? 2004 h`. Most
+reports it as an unsupported sequence event, such as `CSI ? 2004 h`. Most
 are harmless. If a screen looks wrong or a wait times out, check these events
 first; [Diagnose failed waits](../guides/diagnose-failed-waits.md) shows how.
 
