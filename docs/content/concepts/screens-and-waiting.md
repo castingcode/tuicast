@@ -16,14 +16,14 @@ the screen. The bytes for one screen can arrive in several pieces, in any
 order the application chose.
 
 TUICast applies those bytes to an emulated terminal, the same way a physical
-terminal would, and keeps the result: a grid of characters with the cursor
+terminal would, and keeps the result. It should resemble a grid of characters with the cursor
 position, colors, and attributes. Your code works with this grid, so
 `contains("ORDER SHIPPED")` checks what a user would actually see.
 
 ## Screen Snapshots
 
 Reading the screen returns a **snapshot**: a copy of the screen at one moment.
-A snapshot never changes, even as the application keeps drawing, so you can
+A snapshot never changes, even as the application keeps drawing. You can
 check it at leisure or save it in a test report. Each snapshot has a
 revision number that increases when the visible screen changes.
 
@@ -61,8 +61,7 @@ that change nothing visible. Typical quiet periods are 50 to 200 milliseconds.
 The most reliable matcher identifies the screen uniquely and cannot match the
 previous screen:
 
-- Wait for a screen title or field label, not a word that appears on many
-  screens.
+- Wait for a screen title or field label, do not wait for a key word to appear
 - Combine conditions, for example a title and the cursor in the first input
   field.
 - Wait for a message to disappear, such as `PROCESSING`, with a negated
@@ -71,5 +70,5 @@ previous screen:
 ## When a Wait Fails
 
 A failed wait reports what it expected and the last screen it saw. It also
-carries a **flight recording** of the host output that preceded the failure.
+carries a flight recording of the host output that preceded the failure.
 See [Diagnose failed waits](../guides/diagnose-failed-waits.md).
