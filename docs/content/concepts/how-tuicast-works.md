@@ -22,7 +22,7 @@ terminal, and keeps an up-to-date copy of the screen. Your code, through an
 
 ## The Driver
 
-`tuicast-driver` is a single binary that does the hard work: it opens SSH and
+`tuicast-driver` is a single binary that opens SSH and
 Telnet connections, negotiates terminal settings, interprets the escape
 sequences the application sends, and maintains each session's screen. It also
 implements waiting, because deciding when a screen is ready depends on timing
