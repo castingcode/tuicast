@@ -23,7 +23,7 @@ connects to, and open no network ports unless you ask.
 
 An SSH connection must verify the server's identity in exactly one way:
 
-- a `known_hosts` file;
+- a `known_hosts` file
 - the server's expected SHA-256 host-key fingerprint; or
 - an explicit opt-out, intended only for local test servers such as the
   reference TUI.
@@ -37,7 +37,7 @@ When a wait fails, TUICast keeps the most recent host output, up to 64 KiB, for
 diagnosis. That output can contain anything the application displayed,
 including business or personal data. TUICast:
 
-- captures what the host sent, not what your code typed;
+- captures what the host sent, not what your code typed
 - writes dump files only when you set a dump directory, and makes them
   readable only by their owner; and
 - never includes the contents of unsupported control strings, such as
@@ -49,15 +49,15 @@ application's data.
 ## No Listening Ports by Default
 
 The driver talks to its SDK over standard input and output. It opens a network
-listener only when you enable **Inspector**, its read-only web page. Inspector
-has no authentication or TLS, so bind it to `127.0.0.1`; the driver warns when
-it is bound to any other address. **Workbench**, which can send input, works
+listener only when you enable the Inspector web page. Inspector
+has no authentication or TLS, so bind it to `127.0.0.1`. The driver warns when
+it is bound to any other address. Workbench, which can send input, works
 only on loopback addresses and rejects cross-origin requests.
 
 ## AI Agents
 
 The MCP server limits what an agent can reach. An operator defines named
-**profiles** that fix the host, credentials, terminal type, and screen size. An
+profiles that fix the host, credentials, terminal type, and screen size. An
 agent can choose a profile by name but cannot supply an address or read a
 credential. Profile listings omit addresses and secrets. Host-key verification
 is required unless the operator explicitly disables it, which logs a warning.
