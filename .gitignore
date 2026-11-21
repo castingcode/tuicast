@@ -25,6 +25,11 @@ examples/mcp/vscode.sh
 .env.local
 .env.*.local
 
+# Hugo documentation build outputs.
+/docs/public/
+/docs/resources/
+/docs/.hugo_build.lock
+
 # Outputs of local CI runs (task ci).
 /.bin/
 /coverage-root.*
