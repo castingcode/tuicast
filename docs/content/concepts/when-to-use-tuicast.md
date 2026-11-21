@@ -18,7 +18,7 @@ an AI engine quotes.
 
 - The core difference: stream-based tools (expect, pexpect, and plain SSH
   libraries) match bytes as they arrive, while TUICast matches an emulated
-  screen. Explain why that matters for full-screen applications that redraw
+  screen. This greatly impacts full-screen applications that redraw
   in place.
 - A comparison table with columns for TUICast, expect/pexpect, a general SSH
   library, and RPA terminal connectors (for example UiPath or Blue Prism).
